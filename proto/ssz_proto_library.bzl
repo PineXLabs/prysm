@@ -26,6 +26,8 @@ mainnet = {
     "max_blobs_per_block.size": "6",
     "max_blob_commitments.size": "4096",
     "kzg_commitment_inclusion_proof_depth.size": "17",
+    "segment.size": "2048",
+    "max_columns_per_block.size": "128",
 }
 
 minimal = {
@@ -48,6 +50,8 @@ minimal = {
     "max_blobs_per_block.size": "6",
     "max_blob_commitments.size": "16",
     "kzg_commitment_inclusion_proof_depth.size": "9",
+    "segment.size": "2048",
+    "max_columns_per_block.size": "128",
 }
 
 ###### Rules definitions #######
