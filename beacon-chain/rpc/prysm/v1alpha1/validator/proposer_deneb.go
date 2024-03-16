@@ -2,8 +2,10 @@ package validator
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
+	"github.com/PineXLabs/das"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
@@ -90,4 +92,87 @@ func buildBlobSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgProo
 		}
 	}
 	return blobSidecars, nil
+}
+
+// buildColumnSidecars given a block, builds the column sidecars for the block.
+func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgProofs [][]byte) ([]*ethpb.ColumnSidecar, error) {
+	if blk.Version() < version.Deneb {
+		return nil, nil // No blobs before deneb.
+	}
+	denebBlk, err := blk.PbDenebBlock()
+	if err != nil {
+		return nil, err
+	}
+	cLen := len(denebBlk.Block.Body.BlobKzgCommitments)
+	if cLen != len(blobs) || cLen != len(kzgProofs) {
+		return nil, errors.New("blob KZG commitments don't match number of blobs or KZG proofs")
+	}
+	log.Debugf("In buildColumnSidecars, clen is %d\n", cLen)
+	if cLen <= 0 {
+		return nil, nil // No blobs in this block.
+	}
+
+	_das := das.New()
+	colSidecars, err := _das.BlobsToColumns(blobs, denebBlk.Block.Body.BlobKzgCommitments)
+	if err != nil {
+		log.Debugf("In buildColumnSidecars, BlobsToColumns failed, error is %s\n", err.Error())
+		return nil, err
+	}
+	log.Debugf("In buildColumnSidecars, BlobsToColumns ok, len(colSidecars) is %d\n", len(colSidecars))
+	if len(colSidecars) > 0 {
+		for i, com := range colSidecars[0].Commitments {
+			comStr := fmt.Sprintf("0x%x", das.MarshalCommitment(&com))
+			log.Debugf("commitment[%d] is %s\n", i, comStr)
+		}
+	}
+
+	header, err := blk.Header()
+	if err != nil {
+		return nil, err
+	}
+
+	//var merkleProofs [][][]byte
+	//for i := range kzgProofs {
+	//	proof, err := blocks.MerkleProofKZGCommitment(body, i)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	merkleProofs = append(merkleProofs, proof)
+	//}
+
+	columnSidecars := make([]*ethpb.ColumnSidecar, len(colSidecars))
+	for i := range colSidecars {
+		columnSidecars[i] = &ethpb.ColumnSidecar{
+			Index:              uint64(colSidecars[i].ColumnNumber),
+			Segments:           MarshalSegmentDataList(colSidecars[i].SegmentDataList),
+			BlobKzgCommitments: MarshalCommitments(colSidecars[i].Commitments),
+			SegmentKzgProofs:   MarshalProofs(colSidecars[i].Proofs),
+			SignedBlockHeader:  header,
+		}
+	}
+	return columnSidecars, nil
+}
+
+func MarshalSegmentDataList(segments []das.SegmentData) [][]byte {
+	var segmentsBytes [][]byte
+	for _, seg := range segments {
+		segmentsBytes = append(segmentsBytes, seg.Marshal())
+	}
+	return segmentsBytes
+}
+
+func MarshalCommitments(commitments []das.Commitment) [][]byte {
+	var commitmentsBytes [][]byte
+	for _, com := range commitments {
+		commitmentsBytes = append(commitmentsBytes, das.MarshalCommitment(&com))
+	}
+	return commitmentsBytes
+}
+
+func MarshalProofs(proofs []das.Proof) [][]byte {
+	var proofsBytes [][]byte
+	for _, proof := range proofs {
+		proofsBytes = append(proofsBytes, das.MarshalProof(&proof))
+	}
+	return proofsBytes
 }
