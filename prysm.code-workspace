@@ -1,0 +1,14 @@
+{
+	"folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../go-ethereum"
+        },
+        {
+            "path": "../blob-utils"
+        }
+    ],
+    "settings": {}
+}
