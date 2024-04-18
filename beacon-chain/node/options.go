@@ -59,3 +59,28 @@ func WithBlobRetentionEpochs(e primitives.Epoch) Option {
 		return nil
 	}
 }
+
+// WithColumnStorage sets the ColumnStorage backend for the BeaconNode
+func WithColumnStorage(bs *filesystem.ColumnStorage) Option {
+	return func(bn *BeaconNode) error {
+		bn.ColumnStorage = bs
+		return nil
+	}
+}
+
+// WithColumnStorageOptions appends 1 or more filesystem.ColumnStorageOption on the beacon node,
+// to be used when initializing blob storage.
+func WithColumnStorageOptions(opt ...filesystem.ColumnStorageOption) Option {
+	return func(bn *BeaconNode) error {
+		bn.ColumnStorageOptions = append(bn.ColumnStorageOptions, opt...)
+		return nil
+	}
+}
+
+// WithColumnRetentionEpochs sets the columnRetentionEpochs value, used in kv store initialization.
+func WithColumnRetentionEpochs(e primitives.Epoch) Option {
+	return func(bn *BeaconNode) error {
+		bn.columnRetentionEpochs = e
+		return nil
+	}
+}

@@ -45,6 +45,13 @@ const syncLockerVal = 100
 // chosen more than sync and attestation subnet combined.
 const blobSubnetLockerVal = 110
 
+// The value used with the column sidecar subnet, in order
+// to create an appropriate key to retrieve
+// the relevant lock. This is used to differentiate
+// column subnets from others. This is deliberately
+// chosen more than sync and attestation subnet combined.
+const columnSubnetLockerVal = 110
+
 // FindPeersWithSubnet performs a network search for peers
 // subscribed to a particular subnet. Then it tries to connect
 // with those peers. This method will block until either:

@@ -287,29 +287,27 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 		return nil, status.Errorf(codes.Internal, "Could not hash tree root: %v", err)
 	}
 
-	/*
-		var wg sync.WaitGroup
-		errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+	errChan := make(chan error, 1)
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := vs.broadcastReceiveBlock(ctx, block, root); err != nil {
-				errChan <- errors.Wrap(err, "broadcast/receive block failed")
-				return
-			}
-			errChan <- nil
-		}()
-
-		if err := vs.broadcastAndReceiveBlobs(ctx, sidecars, root); err != nil {
-			return nil, status.Errorf(codes.Internal, "Could not broadcast/receive blobs: %v", err)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := vs.broadcastReceiveBlock(ctx, block, root); err != nil {
+			errChan <- errors.Wrap(err, "broadcast/receive block failed")
+			return
 		}
+		errChan <- nil
+	}()
 
-		wg.Wait()
-		if err := <-errChan; err != nil {
-			return nil, status.Errorf(codes.Internal, "Could not broadcast/receive block: %v", err)
-		}
-	*/
+	if err := vs.broadcastAndReceiveColumns(ctx, columnSidecars, root); err != nil {
+		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive columns: %v", err)
+	}
+
+	wg.Wait()
+	if err := <-errChan; err != nil {
+		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive block: %v", err)
+	}
 
 	return &ethpb.ProposeResponse{BlockRoot: root[:]}, nil
 }
@@ -398,6 +396,29 @@ func (vs *Server) broadcastAndReceiveBlobs(ctx context.Context, sidecars []*ethp
 		vs.OperationNotifier.OperationFeed().Send(&feed.Event{
 			Type: operation.BlobSidecarReceived,
 			Data: &operation.BlobSidecarReceivedData{Blob: &verifiedBlob},
+		})
+	}
+	return nil
+}
+
+// broadcastAndReceiveColumns handles the broadcasting and reception of column sidecars.
+func (vs *Server) broadcastAndReceiveColumns(ctx context.Context, sidecars []*ethpb.ColumnSidecar, root [32]byte) error {
+	for i, sc := range sidecars {
+		if err := vs.P2P.BroadcastColumn(ctx, uint64(i), sc); err != nil {
+			return errors.Wrap(err, "broadcast column failed")
+		}
+
+		readOnlySc, err := blocks.NewROColumnWithRoot(sc, root)
+		if err != nil {
+			return errors.Wrap(err, "ROColumn creation failed")
+		}
+		verifiedColumn := blocks.NewVerifiedROColumn(readOnlySc)
+		if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil { //todo: cause painc, must to complete
+			return errors.Wrap(err, "receive column failed")
+		}
+		vs.OperationNotifier.OperationFeed().Send(&feed.Event{
+			Type: operation.ColumnSidecarReceived,
+			Data: &operation.ColumnSidecarReceivedData{Column: &verifiedColumn},
 		})
 	}
 	return nil

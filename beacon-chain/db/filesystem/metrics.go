@@ -33,4 +33,31 @@ var (
 		Name: "blob_disk_bytes",
 		Help: "Approximate number of bytes occupied by blobs in storage",
 	})
+	columnBuckets     = []float64{3, 5, 7, 9, 11, 13} //todo: may needs to be revised...
+	columnSaveLatency = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "column_storage_save_latency",
+		Help:    "Latency of columnSidecar storage save operations in milliseconds",
+		Buckets: columnBuckets,
+	})
+	columnFetchLatency = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "column_storage_get_latency",
+		Help:    "Latency of columnSidecar storage get operations in milliseconds",
+		Buckets: columnBuckets,
+	})
+	columnsPrunedCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "column_pruned",
+		Help: "Number of columnSidecar files pruned.",
+	})
+	columnsWrittenCounter = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "column_written",
+		Help: "Number of columnSidecar files written",
+	})
+	columnDiskCount = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "column_disk_count",
+		Help: "Approximate number of column files in storage",
+	})
+	columnDiskSize = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "column_disk_bytes",
+		Help: "Approximate number of bytes occupied by columns in storage",
+	})
 )

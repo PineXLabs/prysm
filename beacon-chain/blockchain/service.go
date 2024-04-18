@@ -65,8 +65,10 @@ type Service struct {
 	clockWaiter                   startup.ClockWaiter
 	syncComplete                  chan struct{}
 	blobNotifiers                 *blobNotifierMap
+	columnNotifiers               *columnNotifierMap
 	blockBeingSynced              *currentlySyncingBlock
 	blobStorage                   *filesystem.BlobStorage
+	columnStorage                 *filesystem.ColumnStorage
 	lastPublishedLightClientEpoch primitives.Epoch
 }
 
@@ -108,6 +110,58 @@ type blobNotifierMap struct {
 	sync.RWMutex
 	notifiers map[[32]byte]chan uint64
 	seenIndex map[[32]byte][fieldparams.MaxBlobsPerBlock]bool
+}
+
+type columnNotifierMap struct {
+	sync.RWMutex
+	notifiers map[[32]byte]chan uint64
+	seenIndex map[[32]byte][fieldparams.MaxColumnsPerBlock]bool
+}
+
+// notifyIndex notifies a blob by its index for a given root.
+// It uses internal maps to keep track of seen indices and notifier channels.
+func (cn *columnNotifierMap) notifyIndex(root [32]byte, idx uint64) {
+	if idx >= fieldparams.MaxColumnsPerBlock {
+		return
+	}
+
+	cn.Lock()
+	seen := cn.seenIndex[root]
+	if seen[idx] {
+		cn.Unlock()
+		return
+	}
+	seen[idx] = true
+	cn.seenIndex[root] = seen
+
+	// Retrieve or create the notifier channel for the given root.
+	c, ok := cn.notifiers[root]
+	if !ok {
+		c = make(chan uint64, fieldparams.MaxColumnsPerBlock)
+		cn.notifiers[root] = c
+	}
+
+	cn.Unlock()
+
+	c <- idx
+}
+
+func (cn *columnNotifierMap) forRoot(root [32]byte) chan uint64 {
+	cn.Lock()
+	defer cn.Unlock()
+	c, ok := cn.notifiers[root]
+	if !ok {
+		c = make(chan uint64, fieldparams.MaxColumnsPerBlock)
+		cn.notifiers[root] = c
+	}
+	return c
+}
+
+func (cn *columnNotifierMap) delete(root [32]byte) {
+	cn.Lock()
+	defer cn.Unlock()
+	delete(cn.seenIndex, root)
+	delete(cn.notifiers, root)
 }
 
 // notifyIndex notifies a blob by its index for a given root.
@@ -167,9 +221,9 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 		}
 	}
 	ctx, cancel := context.WithCancel(ctx)
-	bn := &blobNotifierMap{
+	cn := &columnNotifierMap{
 		notifiers: make(map[[32]byte]chan uint64),
-		seenIndex: make(map[[32]byte][fieldparams.MaxBlobsPerBlock]bool),
+		seenIndex: make(map[[32]byte][fieldparams.MaxColumnsPerBlock]bool),
 	}
 	srv := &Service{
 		ctx:                  ctx,
@@ -177,7 +231,7 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 		boundaryRoots:        [][32]byte{},
 		checkpointStateCache: cache.NewCheckpointStateCache(),
 		initSyncBlocks:       make(map[[32]byte]interfaces.ReadOnlySignedBeaconBlock),
-		blobNotifiers:        bn,
+		columnNotifiers:      cn,
 		cfg:                  &config{},
 		blockBeingSynced:     &currentlySyncingBlock{roots: make(map[[32]byte]struct{})},
 	}

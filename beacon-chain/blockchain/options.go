@@ -199,6 +199,14 @@ func WithBlobStorage(b *filesystem.BlobStorage) Option {
 	}
 }
 
+// WithColumnStorage sets the column storage backend for the blockchain service.
+func WithColumnStorage(c *filesystem.ColumnStorage) Option {
+	return func(s *Service) error {
+		s.columnStorage = c
+		return nil
+	}
+}
+
 func WithSyncChecker(checker Checker) Option {
 	return func(s *Service) error {
 		s.cfg.SyncChecker = checker
