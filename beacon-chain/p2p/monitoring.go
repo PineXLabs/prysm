@@ -64,6 +64,10 @@ var (
 		Name: "p2p_blob_sidecar_committee_broadcasts",
 		Help: "The number of blob sidecar committee messages that were broadcast with no peer on.",
 	})
+	columnSidecarCommitteeBroadcasts = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "p2p_column_sidecar_committee_broadcasts",
+		Help: "The number of column sidecar committee messages that were broadcast with no peer on.",
+	})
 	syncCommitteeBroadcastAttempts = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "p2p_sync_committee_subnet_attempted_broadcasts",
 		Help: "The number of sync committee that were attempted to be broadcast.",
@@ -71,6 +75,10 @@ var (
 	blobSidecarCommitteeBroadcastAttempts = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "p2p_blob_sidecar_committee_attempted_broadcasts",
 		Help: "The number of blob sidecar committee messages that were attempted to be broadcast.",
+	})
+	columnSidecarCommitteeBroadcastAttempts = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "p2p_column_sidecar_committee_attempted_broadcasts",
+		Help: "The number of column sidecar committee messages that were attempted to be broadcast.",
 	})
 
 	// Gossip Tracer Metrics

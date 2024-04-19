@@ -102,6 +102,7 @@ type config struct {
 type blockchainService interface {
 	blockchain.BlockReceiver
 	blockchain.BlobReceiver
+	blockchain.ColumnReceiver
 	blockchain.HeadFetcher
 	blockchain.FinalizationFetcher
 	blockchain.ForkFetcher
@@ -133,6 +134,8 @@ type Service struct {
 	seenBlockCache                   *lru.Cache
 	seenBlobLock                     sync.RWMutex
 	seenBlobCache                    *lru.Cache
+	seenColumnLock                   sync.RWMutex
+	seenColumnCache                  *lru.Cache
 	seenAggregatedAttestationLock    sync.RWMutex
 	seenAggregatedAttestationCache   *lru.Cache
 	seenUnAggregatedAttestationLock  sync.RWMutex

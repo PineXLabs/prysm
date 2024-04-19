@@ -122,6 +122,9 @@ type BeaconNode struct {
 	BlobStorage             *filesystem.BlobStorage
 	BlobStorageOptions      []filesystem.BlobStorageOption
 	blobRetentionEpochs     primitives.Epoch
+	ColumnStorage           *filesystem.ColumnStorage
+	ColumnStorageOptions    []filesystem.ColumnStorageOption
+	columnRetentionEpochs   primitives.Epoch
 	verifyInitWaiter        *verification.InitializerWaiter
 	syncChecker             *initialsync.SyncChecker
 }
@@ -178,13 +181,21 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, opts ...Option) (*Beaco
 	}
 
 	// Allow tests to set it as an opt.
-	if beacon.BlobStorage == nil {
-		beacon.BlobStorageOptions = append(beacon.BlobStorageOptions, filesystem.WithSaveFsync(features.Get().BlobSaveFsync))
-		blobs, err := filesystem.NewBlobStorage(beacon.BlobStorageOptions...)
+	//if beacon.BlobStorage == nil {
+	//	beacon.BlobStorageOptions = append(beacon.BlobStorageOptions, filesystem.WithSaveFsync(features.Get().BlobSaveFsync))
+	//	blobs, err := filesystem.NewBlobStorage(beacon.BlobStorageOptions...)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	beacon.BlobStorage = blobs
+	//}
+	if beacon.ColumnStorage == nil {
+		beacon.ColumnStorageOptions = append(beacon.ColumnStorageOptions, filesystem.WithColumnSaveFsync(features.Get().ColumnSaveFsync))
+		columns, err := filesystem.NewColumnStorage(beacon.ColumnStorageOptions...)
 		if err != nil {
 			return nil, err
 		}
-		beacon.BlobStorage = blobs
+		beacon.ColumnStorage = columns
 	}
 
 	bfs, err := startBaseServices(cliCtx, beacon, depositAddress)
@@ -290,7 +301,7 @@ func startBaseServices(cliCtx *cli.Context, beacon *BeaconNode, depositAddress s
 	if err := beacon.startDB(cliCtx, depositAddress); err != nil {
 		return nil, errors.Wrap(err, "could not start DB")
 	}
-	beacon.BlobStorage.WarmCache()
+	beacon.ColumnStorage.WarmCache()
 
 	log.Debugln("Starting Slashing DB")
 	if err := beacon.startSlasherDB(cliCtx); err != nil {
@@ -782,7 +793,8 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		blockchain.WithFinalizedStateAtStartUp(b.finalizedStateAtStartUp),
 		blockchain.WithClockSynchronizer(gs),
 		blockchain.WithSyncComplete(syncComplete),
-		blockchain.WithBlobStorage(b.BlobStorage),
+		//blockchain.WithBlobStorage(b.BlobStorage),
+		blockchain.WithColumnStorage(b.ColumnStorage),
 		blockchain.WithTrackedValidatorsCache(b.trackedValidatorsCache),
 		blockchain.WithPayloadIDCache(b.payloadIDCache),
 		blockchain.WithSyncChecker(b.syncChecker),
@@ -998,6 +1010,7 @@ func (b *BeaconNode) registerRPCService(router *mux.Router) error {
 		FinalizationFetcher:           chainService,
 		BlockReceiver:                 chainService,
 		BlobReceiver:                  chainService,
+		ColumnReceiver:                chainService,
 		AttestationReceiver:           chainService,
 		GenesisTimeFetcher:            chainService,
 		GenesisFetcher:                chainService,
