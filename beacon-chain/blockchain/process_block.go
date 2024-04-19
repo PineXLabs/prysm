@@ -233,7 +233,7 @@ func (s *Service) onBlockBatch(ctx context.Context, blks []consensusblocks.ROBlo
 			}
 		}
 		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
-			return errors.Wrapf(err, "could not validate blob data availability at slot %d", b.Block().Slot())
+			return errors.Wrapf(err, "could not validate blob data availability availability at slot %d", b.Block().Slot())
 		}
 		args := &forkchoicetypes.BlockAndCheckpoints{Block: b.Block(),
 			JustifiedCheckpoint: jCheckpoints[i],
@@ -514,6 +514,33 @@ func missingIndices(bs *filesystem.BlobStorage, root [32]byte, expected [][]byte
 	return missing, nil
 }
 
+// missingColumnIndices uses the expected commitments from the block to determine
+// which ColumnSidecar indices would need to be in the database for DA success.
+// It returns a map where each key represents a missing ColumnSidecar index.
+// An empty map means we have all indices; a non-empty map can be used to compare incoming
+// ColumnSidecars against the set of known missing sidecars.
+func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected [][]byte) (map[uint64]struct{}, error) {
+	if len(expected) == 0 {
+		return nil, nil
+	}
+	if len(expected) > fieldparams.MaxBlobsPerBlock {
+		return nil, errMaxBlobsExceeded
+	}
+	indices, err := cs.Indices(root) //todo: to confirm
+	if err != nil {
+		return nil, err
+	}
+	missing := make(map[uint64]struct{}, fieldparams.MaxColumnsPerBlock)
+	for i := 0; i < fieldparams.MaxColumnsPerBlock; i++ {
+		ui := uint64(i)
+		if !indices[i] {
+			missing[ui] = struct{}{}
+		}
+
+	}
+	return missing, nil
+}
+
 // isDataAvailable blocks until all BlobSidecars committed to in the block are available,
 // or an error or context cancellation occurs. A nil result means that the data availability check is successful.
 // The function will first check the database to see if all sidecars have been persisted. If any
@@ -528,8 +555,8 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if block == nil {
 		return errors.New("invalid nil beacon block")
 	}
-	// We are only required to check within MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS
-	if !params.WithinDAPeriod(slots.ToEpoch(block.Slot()), slots.ToEpoch(s.CurrentSlot())) {
+	// We are only required to check within MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(block.Slot()), slots.ToEpoch(s.CurrentSlot())) {
 		return nil
 	}
 
@@ -546,19 +573,24 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if expected == 0 {
 		return nil
 	}
-	// get a map of BlobSidecar indices that are not currently available.
-	missing, err := missingIndices(s.blobStorage, root, kzgCommitments)
+	// get a map of ColumnSidecar indices that are not currently available.
+	missing, err := missingColumnIndices(s.columnStorage, root, kzgCommitments)
 	if err != nil {
 		return err
 	}
-	// If there are no missing indices, all BlobSidecars are available.
+	// If there are no missing indices, all ColumnSidecars are available.
 	if len(missing) == 0 {
 		return nil
 	}
+	log.Debugf("len(missing) is %d", len(missing))
 
 	// The gossip handler for blobs writes the index of each verified blob referencing the given
 	// root to the channel returned by blobNotifiers.forRoot.
-	nc := s.blobNotifiers.forRoot(root)
+	//nc := s.blobNotifiers.forRoot(root)
+
+	// The gossip handler for columns writes the index of each verified column referencing the given
+	// root to the channel returned by columnNotifiers.forRoot.
+	nc := s.columnNotifiers.forRoot(root)
 
 	// Log for DA checks that cross over into the next slot; helpful for debugging.
 	nextSlot := slots.BeginsAt(signed.Block().Slot()+1, s.genesisTime)
@@ -576,6 +608,7 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	for {
 		select {
 		case idx := <-nc:
+			log.Debugf("for select case idx: len(missing) is %d", len(missing))
 			// Delete each index seen in the notification channel.
 			delete(missing, idx)
 			// Read from the channel until there are no more missing sidecars.
@@ -583,10 +616,11 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 				continue
 			}
 			// Once all sidecars have been observed, clean up the notification channel.
-			s.blobNotifiers.delete(root)
+			s.columnNotifiers.delete(root)
 			return nil
 		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), "context deadline waiting for blob sidecars slot: %d, BlockRoot: %#x", block.Slot(), root)
+			log.Debugf("for select case ctx.Done: len(missing) is %d", len(missing))
+			return errors.Wrapf(ctx.Err(), "context deadline waiting for column sidecars slot: %d, BlockRoot: %#x", block.Slot(), root)
 		}
 	}
 }

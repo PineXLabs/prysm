@@ -24,8 +24,10 @@ const retentionBuffer primitives.Epoch = 2
 const bytesPerSidecar = 131928
 
 var (
-	errPruningFailures = errors.New("blobs could not be pruned for some roots")
-	errNotBlobSSZ      = errors.New("not a blob ssz file")
+	errPruningFailures       = errors.New("blobs could not be pruned for some roots")
+	errNotBlobSSZ            = errors.New("not a blob ssz file")
+	errColumnPruningFailures = errors.New("columns could not be pruned for some roots")
+	errNotColumnSSZ          = errors.New("not a column ssz file")
 )
 
 type blobPruner struct {
@@ -36,12 +38,28 @@ type blobPruner struct {
 	fs           afero.Fs
 }
 
+type columnPruner struct {
+	sync.Mutex
+	prunedBefore atomic.Uint64
+	windowSize   primitives.Slot
+	slotMap      *columnSlotForRoot
+	fs           afero.Fs
+}
+
 func newBlobPruner(fs afero.Fs, retain primitives.Epoch) (*blobPruner, error) {
 	r, err := slots.EpochStart(retain + retentionBuffer)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not set retentionSlots")
 	}
 	return &blobPruner{fs: fs, windowSize: r, slotMap: newSlotForRoot()}, nil
+}
+
+func newColumnPruner(fs afero.Fs, retain primitives.Epoch) (*columnPruner, error) {
+	r, err := slots.EpochStart(retain + retentionBuffer)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not set column retentionSlots")
+	}
+	return &columnPruner{fs: fs, windowSize: r, slotMap: newColumnSlotForRoot()}, nil
 }
 
 // notify updates the pruner's view of root->blob mappings. This allows the pruner to build a cache
@@ -57,6 +75,24 @@ func (p *blobPruner) notify(root [32]byte, latest primitives.Slot, idx uint64) e
 	go func() {
 		if err := p.prune(primitives.Slot(pruned)); err != nil {
 			log.WithError(err).Errorf("Failed to prune blobs from slot %d", latest)
+		}
+	}()
+	return nil
+}
+
+// notify updates the pruner's view of root->column mappings. This allows the pruner to build a cache
+// of root->slot mappings and decide when to evict old columns based on the age of present columns.
+func (p *columnPruner) notify(root [32]byte, latest primitives.Slot, idx uint64) error {
+	if err := p.slotMap.ensure(rootString(root), latest, idx); err != nil {
+		return err
+	}
+	pruned := uint64(windowMin(latest, p.windowSize))
+	if p.prunedBefore.Swap(pruned) == pruned {
+		return nil
+	}
+	go func() {
+		if err := p.prune(primitives.Slot(pruned)); err != nil {
+			log.WithError(err).Errorf("Failed to prune columns from slot %d", latest)
 		}
 	}()
 	return nil
@@ -99,6 +135,51 @@ func (p *blobPruner) prune(pruneBefore primitives.Slot) error {
 	entries, err := listDir(p.fs, ".")
 	if err != nil {
 		return errors.Wrap(err, "unable to list root blobs directory")
+	}
+	dirs := filter(entries, filterRoot)
+	for _, dir := range dirs {
+		pruned, err := p.tryPruneDir(dir, pruneBefore)
+		if err != nil {
+			totalErr += 1
+			log.WithError(err).WithField("directory", dir).Error("Unable to prune directory")
+		}
+		totalPruned += pruned
+	}
+
+	if totalErr > 0 {
+		return errors.Wrapf(errPruningFailures, "pruning failed for %d root directories", totalErr)
+	}
+	return nil
+}
+
+// Prune prunes columns in the base directory based on the retention epoch.
+// It deletes columns older than currentEpoch - (retentionEpochs+bufferEpochs).
+// This is so that we keep a slight buffer and columns are deleted after n+2 epochs.
+func (p *columnPruner) prune(pruneBefore primitives.Slot) error {
+	p.Lock()
+	defer p.Unlock()
+	start := time.Now()
+	totalPruned, totalErr := 0, 0
+	// Customize logging/metrics behavior for the initial cache warmup when slot=0.
+	// We'll never see a prune request for slot 0, unless this is the initial call to warm up the cache.
+	if pruneBefore == 0 {
+		defer func() {
+			log.WithField("duration", time.Since(start).String()).Debug("Warmed up pruner cache")
+		}()
+	} else {
+		defer func() {
+			log.WithFields(logrus.Fields{
+				"upToEpoch":    slots.ToEpoch(pruneBefore),
+				"duration":     time.Since(start).String(),
+				"filesRemoved": totalPruned,
+			}).Debug("Pruned old columns")
+			columnsPrunedCounter.Add(float64(totalPruned))
+		}()
+	}
+
+	entries, err := listDir(p.fs, ".")
+	if err != nil {
+		return errors.Wrap(err, "unable to list root columns directory")
 	}
 	dirs := filter(entries, filterRoot)
 	for _, dir := range dirs {
@@ -183,6 +264,69 @@ func (p *blobPruner) tryPruneDir(dir string, pruneBefore primitives.Slot) (int, 
 	return len(scFiles), nil
 }
 
+func (p *columnPruner) tryPruneDir(dir string, pruneBefore primitives.Slot) (int, error) {
+	root := rootFromDir(dir)
+	slot, slotCached := p.slotMap.slot(root)
+	// Return early if the slot is cached and doesn't need pruning.
+	if slotCached && shouldRetain(slot, pruneBefore) {
+		return 0, nil
+	}
+
+	// entries will include things that aren't ssz files, like dangling .part files. We need these to
+	// completely clean up the directory.
+	entries, err := listDir(p.fs, dir)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to list blobs in directory %s", dir)
+	}
+	// scFiles filters the dir listing down to the ssz encoded ColumnSidecar files. This allows us to peek
+	// at the first one in the list to figure out the slot.
+	scFiles := filter(entries, filterSsz)
+	if len(scFiles) == 0 {
+		log.WithField("dir", dir).Warn("Pruner ignoring directory with no column files")
+		return 0, nil
+	}
+	if !slotCached {
+		slot, err = slotFromColumnFile(path.Join(dir, scFiles[0]), p.fs)
+		if err != nil {
+			return 0, errors.Wrapf(err, "slot could not be read from column file %s", scFiles[0])
+		}
+		for i := range scFiles {
+			idx, err := idxFromColumnPath(scFiles[i])
+			if err != nil {
+				return 0, errors.Wrapf(err, "index could not be determined for column file %s", scFiles[i])
+			}
+			if err := p.slotMap.ensure(root, slot, idx); err != nil {
+				return 0, errors.Wrapf(err, "could not update prune cache for column file %s", scFiles[i])
+			}
+		}
+		if shouldRetain(slot, pruneBefore) {
+			return 0, nil
+		}
+	}
+
+	removed := 0
+	for _, fname := range entries {
+		fullName := path.Join(dir, fname)
+		if err := p.fs.Remove(fullName); err != nil {
+			return removed, errors.Wrapf(err, "unable to remove %s", fullName)
+		}
+		// Don't count other files that happen to be in the dir, like dangling .part files.
+		if filterSsz(fname) {
+			removed += 1
+		}
+		// Log a warning whenever we clean up a .part file
+		if filterPart(fullName) {
+			log.WithField("file", fullName).Warn("Deleting abandoned column .part file")
+		}
+	}
+	if err := p.fs.Remove(dir); err != nil {
+		return removed, errors.Wrapf(err, "unable to remove column directory %s", dir)
+	}
+
+	p.slotMap.evict(rootFromDir(dir))
+	return len(scFiles), nil
+}
+
 func idxFromPath(fname string) (uint64, error) {
 	fname = path.Base(fname)
 
@@ -192,6 +336,19 @@ func idxFromPath(fname string) (uint64, error) {
 	parts := strings.Split(fname, ".")
 	if len(parts) != 2 {
 		return 0, errors.Wrap(errNotBlobSSZ, "unexpected filename structure (want <index>.ssz)")
+	}
+	return strconv.ParseUint(parts[0], 10, 64)
+}
+
+func idxFromColumnPath(fname string) (uint64, error) {
+	fname = path.Base(fname)
+
+	if filepath.Ext(fname) != dotSszExt {
+		return 0, errors.Wrap(errNotColumnSSZ, "does not have column .ssz extension")
+	}
+	parts := strings.Split(fname, ".")
+	if len(parts) != 2 {
+		return 0, errors.Wrap(errNotColumnSSZ, "unexpected column filename structure (want <index>.ssz)")
 	}
 	return strconv.ParseUint(parts[0], 10, 64)
 }
@@ -214,12 +371,39 @@ func slotFromFile(file string, fs afero.Fs) (primitives.Slot, error) {
 	return slotFromBlob(f)
 }
 
+// Read slot from marshaled columnSidecar data in the given file. See slotFromColumn for details.
+func slotFromColumnFile(file string, fs afero.Fs) (primitives.Slot, error) {
+	f, err := fs.Open(file)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.WithError(err).Errorf("Could not close blob file")
+		}
+	}()
+	return slotFromColumn(f)
+}
+
 // slotFromBlob reads the ssz data of a file at the specified offset (8 + 131072 + 48 + 48 = 131176 bytes),
 // which is calculated based on the size of the BlobSidecar struct and is based on the size of the fields
 // preceding the slot information within SignedBeaconBlockHeader.
 func slotFromBlob(at io.ReaderAt) (primitives.Slot, error) {
 	b := make([]byte, 8)
 	_, err := at.ReadAt(b, 131176)
+	if err != nil {
+		return 0, err
+	}
+	rawSlot := binary.LittleEndian.Uint64(b)
+	return primitives.Slot(rawSlot), nil
+}
+
+// slotFromColumn reads the ssz data of a file at the specified offset (8 + 131072 + 64*48 + 64*48 = 137224 bytes),
+// which is calculated based on the size of the ColumnSidecar struct and is based on the size of the fields
+// preceding the slot information within SignedBeaconBlockHeader.
+func slotFromColumn(at io.ReaderAt) (primitives.Slot, error) {
+	b := make([]byte, 8)
+	_, err := at.ReadAt(b, 137224)
 	if err != nil {
 		return 0, err
 	}
@@ -276,9 +460,20 @@ func newSlotForRoot() *slotForRoot {
 	}
 }
 
+func newColumnSlotForRoot() *columnSlotForRoot {
+	return &columnSlotForRoot{
+		cache: make(map[string]*columnSlotCacheEntry, params.BeaconConfig().MinEpochsForColumnsSidecarsRequest*fieldparams.SlotsPerEpoch),
+	}
+}
+
 type slotCacheEntry struct {
 	slot primitives.Slot
 	mask [fieldparams.MaxBlobsPerBlock]bool
+}
+
+type columnSlotCacheEntry struct {
+	slot primitives.Slot
+	mask [fieldparams.MaxColumnsPerBlock]bool
 }
 
 type slotForRoot struct {
@@ -287,10 +482,22 @@ type slotForRoot struct {
 	cache  map[string]*slotCacheEntry
 }
 
+type columnSlotForRoot struct {
+	sync.RWMutex
+	nColumns float64
+	cache    map[string]*columnSlotCacheEntry
+}
+
 func (s *slotForRoot) updateMetrics(delta float64) {
 	s.nBlobs += delta
 	blobDiskCount.Set(s.nBlobs)
 	blobDiskSize.Set(s.nBlobs * bytesPerSidecar)
+}
+
+func (c *columnSlotForRoot) updateMetrics(delta float64) {
+	c.nColumns += delta
+	columnDiskCount.Set(c.nColumns)
+	columnDiskSize.Set(c.nColumns * bytesPerSidecar) //todo: not correct now
 }
 
 func (s *slotForRoot) ensure(key string, slot primitives.Slot, idx uint64) error {
@@ -312,10 +519,39 @@ func (s *slotForRoot) ensure(key string, slot primitives.Slot, idx uint64) error
 	return nil
 }
 
+func (c *columnSlotForRoot) ensure(key string, slot primitives.Slot, idx uint64) error {
+	if idx >= fieldparams.MaxColumnsPerBlock {
+		return errColumnIndexOutOfBounds
+	}
+	c.Lock()
+	defer c.Unlock()
+	v, ok := c.cache[key]
+	if !ok {
+		v = &columnSlotCacheEntry{}
+	}
+	v.slot = slot
+	if !v.mask[idx] {
+		c.updateMetrics(1)
+	}
+	v.mask[idx] = true
+	c.cache[key] = v
+	return nil
+}
+
 func (s *slotForRoot) slot(key string) (primitives.Slot, bool) {
 	s.RLock()
 	defer s.RUnlock()
 	v, ok := s.cache[key]
+	if !ok {
+		return 0, false
+	}
+	return v.slot, ok
+}
+
+func (c *columnSlotForRoot) slot(key string) (primitives.Slot, bool) {
+	c.RLock()
+	defer c.RUnlock()
+	v, ok := c.cache[key]
 	if !ok {
 		return 0, false
 	}
@@ -336,4 +572,20 @@ func (s *slotForRoot) evict(key string) {
 		s.updateMetrics(-deleted)
 	}
 	delete(s.cache, key)
+}
+
+func (c *columnSlotForRoot) evict(key string) {
+	c.Lock()
+	defer c.Unlock()
+	v, ok := c.cache[key]
+	var deleted float64
+	if ok {
+		for i := range v.mask {
+			if v.mask[i] {
+				deleted += 1
+			}
+		}
+		c.updateMetrics(-deleted)
+	}
+	delete(c.cache, key)
 }

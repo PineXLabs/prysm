@@ -264,15 +264,23 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", "decode block failed", err)
 	}
 
-	var sidecars []*ethpb.BlobSidecar
-	if block.IsBlinded() {
-		block, sidecars, err = vs.handleBlindedBlock(ctx, block)
-	} else {
-		sidecars, err = vs.handleUnblindedBlock(block, req)
-	}
+	//var sidecars []*ethpb.BlobSidecar
+	//if block.IsBlinded() {
+	//	block, sidecars, err = vs.handleBlindedBlock(ctx, block)
+	//} else {
+	//	sidecars, err = vs.handleUnblindedBlock(block, req)
+	//}
+	//if err != nil {
+	//	return nil, status.Errorf(codes.Internal, "%s: %v", "handle block failed", err)
+	//}
+
+	columnSidecars, err := vs.handleUnblindedBlockToCols(block, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%s: %v", "handle block failed", err)
 	}
+	log.WithFields(logrus.Fields{
+		"columnSidecars count": len(columnSidecars),
+	}).Info("handleUnblindedBlockToCols")
 
 	root, err := block.Block().HashTreeRoot()
 	if err != nil {
@@ -292,8 +300,8 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 		errChan <- nil
 	}()
 
-	if err := vs.broadcastAndReceiveBlobs(ctx, sidecars, root); err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive blobs: %v", err)
+	if err := vs.broadcastAndReceiveColumns(ctx, columnSidecars, root); err != nil {
+		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive columns: %v", err)
 	}
 
 	wg.Wait()
@@ -344,6 +352,16 @@ func (vs *Server) handleUnblindedBlock(block interfaces.SignedBeaconBlock, req *
 	return buildBlobSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
 }
 
+// handleUnblindedBlock processes unblinded beacon blocks.
+func (vs *Server) handleUnblindedBlockToCols(block interfaces.SignedBeaconBlock, req *ethpb.GenericSignedBeaconBlock) ([]*ethpb.ColumnSidecar, error) {
+	dbBlockContents := req.GetDeneb()
+	if dbBlockContents == nil {
+		return nil, nil
+	}
+	log.Debugln("Begin buildColumnSidecars")
+	return buildColumnSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
+}
+
 // broadcastReceiveBlock broadcasts a block and handles its reception.
 func (vs *Server) broadcastReceiveBlock(ctx context.Context, block interfaces.SignedBeaconBlock, root [32]byte) error {
 	protoBlock, err := block.Proto()
@@ -378,6 +396,29 @@ func (vs *Server) broadcastAndReceiveBlobs(ctx context.Context, sidecars []*ethp
 		vs.OperationNotifier.OperationFeed().Send(&feed.Event{
 			Type: operation.BlobSidecarReceived,
 			Data: &operation.BlobSidecarReceivedData{Blob: &verifiedBlob},
+		})
+	}
+	return nil
+}
+
+// broadcastAndReceiveColumns handles the broadcasting and reception of column sidecars.
+func (vs *Server) broadcastAndReceiveColumns(ctx context.Context, sidecars []*ethpb.ColumnSidecar, root [32]byte) error {
+	for i, sc := range sidecars {
+		if err := vs.P2P.BroadcastColumn(ctx, uint64(i), sc); err != nil {
+			return errors.Wrap(err, "broadcast column failed")
+		}
+
+		readOnlySc, err := blocks.NewROColumnWithRoot(sc, root)
+		if err != nil {
+			return errors.Wrap(err, "ROColumn creation failed")
+		}
+		verifiedColumn := blocks.NewVerifiedROColumn(readOnlySc)
+		if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil { //todo: cause painc, must to complete
+			return errors.Wrap(err, "receive column failed")
+		}
+		vs.OperationNotifier.OperationFeed().Send(&feed.Event{
+			Type: operation.ColumnSidecarReceived,
+			Data: &operation.ColumnSidecarReceivedData{Column: &verifiedColumn},
 		})
 	}
 	return nil

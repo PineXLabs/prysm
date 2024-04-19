@@ -23,9 +23,11 @@ mainnet = {
     "blob.size": "131072",  # BYTES_PER_FIELD_ELEMENT * FIELD_ELEMENTS_PER_BLOB
     "logs_bloom.size": "256",
     "extra_data.size": "32",
-    "max_blobs_per_block.size": "6",
+    "max_blobs_per_block.size": "64",
+    "max_columns_per_block.size": "128",
     "max_blob_commitments.size": "4096",
     "kzg_commitment_inclusion_proof_depth.size": "17",
+    "segment.size": "2048",  #  64 * [32]byte
 }
 
 minimal = {
@@ -45,9 +47,11 @@ minimal = {
     "blob.size": "131072",
     "logs_bloom.size": "256",
     "extra_data.size": "32",
-    "max_blobs_per_block.size": "6",
+    "max_blobs_per_block.size": "64",
+    "max_columns_per_block.size": "128",
     "max_blob_commitments.size": "16",
     "kzg_commitment_inclusion_proof_depth.size": "9",
+    "segment.size": "2048",  #  64 * [32]byte
 }
 
 ###### Rules definitions #######
