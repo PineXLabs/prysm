@@ -264,42 +264,52 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 		return nil, status.Errorf(codes.InvalidArgument, "%s: %v", "decode block failed", err)
 	}
 
-	var sidecars []*ethpb.BlobSidecar
-	if block.IsBlinded() {
-		block, sidecars, err = vs.handleBlindedBlock(ctx, block)
-	} else {
-		sidecars, err = vs.handleUnblindedBlock(block, req)
-	}
+	//var sidecars []*ethpb.BlobSidecar
+	//if block.IsBlinded() {
+	//	block, sidecars, err = vs.handleBlindedBlock(ctx, block)
+	//} else {
+	//	sidecars, err = vs.handleUnblindedBlock(block, req)
+	//}
+	//if err != nil {
+	//	return nil, status.Errorf(codes.Internal, "%s: %v", "handle block failed", err)
+	//}
+
+	columnSidecars, err := vs.handleUnblindedBlockToCols(block, req)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "%s: %v", "handle block failed", err)
 	}
+	log.WithFields(logrus.Fields{
+		"columnSidecars count": len(columnSidecars),
+	}).Info("handleUnblindedBlockToCols")
 
 	root, err := block.Block().HashTreeRoot()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not hash tree root: %v", err)
 	}
 
-	var wg sync.WaitGroup
-	errChan := make(chan error, 1)
+	/*
+		var wg sync.WaitGroup
+		errChan := make(chan error, 1)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := vs.broadcastReceiveBlock(ctx, block, root); err != nil {
-			errChan <- errors.Wrap(err, "broadcast/receive block failed")
-			return
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := vs.broadcastReceiveBlock(ctx, block, root); err != nil {
+				errChan <- errors.Wrap(err, "broadcast/receive block failed")
+				return
+			}
+			errChan <- nil
+		}()
+
+		if err := vs.broadcastAndReceiveBlobs(ctx, sidecars, root); err != nil {
+			return nil, status.Errorf(codes.Internal, "Could not broadcast/receive blobs: %v", err)
 		}
-		errChan <- nil
-	}()
 
-	if err := vs.broadcastAndReceiveBlobs(ctx, sidecars, root); err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive blobs: %v", err)
-	}
-
-	wg.Wait()
-	if err := <-errChan; err != nil {
-		return nil, status.Errorf(codes.Internal, "Could not broadcast/receive block: %v", err)
-	}
+		wg.Wait()
+		if err := <-errChan; err != nil {
+			return nil, status.Errorf(codes.Internal, "Could not broadcast/receive block: %v", err)
+		}
+	*/
 
 	return &ethpb.ProposeResponse{BlockRoot: root[:]}, nil
 }
@@ -342,6 +352,16 @@ func (vs *Server) handleUnblindedBlock(block interfaces.SignedBeaconBlock, req *
 		return nil, nil
 	}
 	return buildBlobSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
+}
+
+// handleUnblindedBlock processes unblinded beacon blocks.
+func (vs *Server) handleUnblindedBlockToCols(block interfaces.SignedBeaconBlock, req *ethpb.GenericSignedBeaconBlock) ([]*ethpb.ColumnSidecar, error) {
+	dbBlockContents := req.GetDeneb()
+	if dbBlockContents == nil {
+		return nil, nil
+	}
+	log.Debugln("Begin buildColumnSidecars")
+	return buildColumnSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
 }
 
 // broadcastReceiveBlock broadcasts a block and handles its reception.
