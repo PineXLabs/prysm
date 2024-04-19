@@ -24,6 +24,17 @@ var (
 		Value:   uint64(params.BeaconConfig().MinEpochsForBlobsSidecarsRequest),
 		Aliases: []string{"extend-blob-retention-epoch"},
 	}
+	// ColumnStoragePathFlag defines a flag to start the beacon chain from a give genesis state file.
+	ColumnStoragePathFlag = &cli.PathFlag{
+		Name:  "column-path",
+		Usage: "Location for column storage. Default location will be a 'columns' directory next to the beacon db.",
+	}
+	ColumnRetentionEpochFlag = &cli.Uint64Flag{
+		Name:    "column-retention-epochs",
+		Usage:   "Override the default column retention period (measured in epochs). The node will exit with an error at startup if the value is less than the default of 4096 epochs.",
+		Value:   uint64(params.BeaconConfig().MinEpochsForColumnsSidecarsRequest),
+		Aliases: []string{"extend-column-retention-epoch"},
+	}
 )
 
 // BeaconNodeOptions sets configuration values on the node.BeaconNode value at node startup.
@@ -31,12 +42,12 @@ var (
 // create a cancellable context. If we switch to using App.RunContext, we can set up this cancellation in the cmd
 // package instead, and allow the functional options to tap into context cancellation.
 func BeaconNodeOptions(c *cli.Context) ([]node.Option, error) {
-	e, err := blobRetentionEpoch(c)
+	e, err := columnRetentionEpoch(c)
 	if err != nil {
 		return nil, err
 	}
-	opts := []node.Option{node.WithBlobStorageOptions(
-		filesystem.WithBlobRetentionEpochs(e), filesystem.WithBasePath(blobStoragePath(c)),
+	opts := []node.Option{node.WithColumnStorageOptions(
+		filesystem.WithColumnRetentionEpochs(e), filesystem.WithColumnBasePath(columnStoragePath(c)),
 	)}
 	return opts, nil
 }
@@ -50,7 +61,17 @@ func blobStoragePath(c *cli.Context) string {
 	return blobsPath
 }
 
+func columnStoragePath(c *cli.Context) string {
+	columnsPath := c.Path(ColumnStoragePathFlag.Name)
+	if columnsPath == "" {
+		// append a "columns" subdir to the end of the data dir path
+		columnsPath = path.Join(c.String(cmd.DataDirFlag.Name), "columns")
+	}
+	return columnsPath
+}
+
 var errInvalidBlobRetentionEpochs = errors.New("value is smaller than spec minimum")
+var errInvalidColumnRetentionEpochs = errors.New("value is smaller than spec minimum")
 
 // blobRetentionEpoch returns the spec default MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUEST
 // or a user-specified flag overriding this value. If a user-specified override is
@@ -65,6 +86,24 @@ func blobRetentionEpoch(cliCtx *cli.Context) (primitives.Epoch, error) {
 	// Validate the epoch value against the spec default.
 	if re < params.BeaconConfig().MinEpochsForBlobsSidecarsRequest {
 		return spec, errors.Wrapf(errInvalidBlobRetentionEpochs, "%s=%d, spec=%d", BlobRetentionEpochFlag.Name, re, spec)
+	}
+
+	return re, nil
+}
+
+// columnRetentionEpoch returns the spec default MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUEST
+// or a user-specified flag overriding this value. If a user-specified override is
+// smaller than the spec default, an error will be returned.
+func columnRetentionEpoch(cliCtx *cli.Context) (primitives.Epoch, error) {
+	spec := params.BeaconConfig().MinEpochsForColumnsSidecarsRequest
+	if !cliCtx.IsSet(ColumnRetentionEpochFlag.Name) {
+		return spec, nil
+	}
+
+	re := primitives.Epoch(cliCtx.Uint64(ColumnRetentionEpochFlag.Name))
+	// Validate the epoch value against the spec default.
+	if re < params.BeaconConfig().MinEpochsForColumnsSidecarsRequest {
+		return spec, errors.Wrapf(errInvalidColumnRetentionEpochs, "%s=%d, spec=%d", ColumnRetentionEpochFlag.Name, re, spec)
 	}
 
 	return re, nil

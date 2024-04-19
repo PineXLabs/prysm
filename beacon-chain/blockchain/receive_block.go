@@ -50,6 +50,12 @@ type BlobReceiver interface {
 	ReceiveBlob(context.Context, blocks.VerifiedROBlob) error
 }
 
+// ColumnReceiver interface defines the methods of chain service for receiving new
+// columns
+type ColumnReceiver interface {
+	ReceiveColumn(context.Context, blocks.VerifiedROColumn) error
+}
+
 // SlashingReceiver interface defines the methods of chain service for receiving validated slashing over the wire.
 type SlashingReceiver interface {
 	ReceiveAttesterSlashing(ctx context.Context, slashings *ethpb.AttesterSlashing)
@@ -118,12 +124,16 @@ func (s *Service) ReceiveBlock(ctx context.Context, block interfaces.ReadOnlySig
 	}
 	daStartTime := time.Now()
 	if avs != nil {
-		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), rob); err != nil {
-			return errors.Wrap(err, "could not validate blob data availability (AvailabilityStore.IsDataAvailable)")
+		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), rob); err != nil { //todo: support blob -> column
+			errWrap := errors.Wrap(err, "could not validate column data availability (AvailabilityStore.IsDataAvailable)")
+			log.Errorf(errWrap.Error())
+			return errWrap
 		}
 	} else {
 		if err := s.isDataAvailable(ctx, blockRoot, blockCopy); err != nil {
-			return errors.Wrap(err, "could not validate blob data availability")
+			errWrap := errors.Wrap(err, "could not validate column data availability")
+			log.Errorf(errWrap.Error())
+			return errWrap
 		}
 	}
 	daWaitedTime := time.Since(daStartTime)

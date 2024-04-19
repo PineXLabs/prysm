@@ -9,6 +9,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	"github.com/prysmaticlabs/prysm/v5/crypto/hash"
 	enginev1 "github.com/prysmaticlabs/prysm/v5/proto/engine/v1"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
@@ -140,6 +141,29 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	//      merkleProofs = append(merkleProofs, proof)
 	//}
 
+	var commitConcat []byte
+	for _, c := range denebBlk.Block.Body.BlobKzgCommitments {
+		commitConcat = append(commitConcat, c...)
+	}
+	commitmentsHash := hash.Hash(commitConcat)
+
+	body := blk.Block().Body()
+	commitmentInclusionProofs := make([]*ethpb.KzgCommitmentInclusionProof, 0, cLen)
+	log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
+	for i := range denebBlk.Block.Body.BlobKzgCommitments {
+		proof, err := blocks.MerkleProofKZGCommitment(body, i) //todo: generate merkle tree once
+		log.Debugf("proof for commitment %d is %v", i, proof)
+		if err != nil {
+			return nil, err
+		}
+		kProof := &ethpb.KzgCommitmentInclusionProof{
+			CommitmentInclusionProof: proof,
+		}
+		log.Debugf("kProof for commitment %d is %v", i, kProof)
+		commitmentInclusionProofs = append(commitmentInclusionProofs, kProof)
+	}
+	log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
+
 	columnSidecars := make([]*ethpb.ColumnSidecar, len(colSidecars))
 	for i := range colSidecars {
 		columnSidecars[i] = &ethpb.ColumnSidecar{
@@ -148,6 +172,7 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 			BlobKzgCommitments: MarshalCommitments(colSidecars[i].Commitments),
 			SegmentKzgProofs:   MarshalProofs(colSidecars[i].Proofs),
 			SignedBlockHeader:  header,
+			CommitmentsHash:    commitmentsHash[:],
 		}
 	}
 	return columnSidecars, nil

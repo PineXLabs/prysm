@@ -779,13 +779,18 @@ message BlobSidecars {
     repeated BlobSidecar sidecars = 1 [(ethereum.eth.ext.ssz_max) = "max_blobs_per_block.size"];
 }
 
+message KzgCommitmentInclusionProof {
+    repeated bytes commitment_inclusion_proof = 6  [(ethereum.eth.ext.ssz_size) = "kzg_commitment_inclusion_proof_depth.size,32"];
+}
+
 message ColumnSidecar {
     uint64 index = 1;
-    repeated bytes segments = 2 [(ethereum.eth.ext.ssz_size) = "max_blobs_per_block.size,segment.size"];
-    repeated bytes blob_kzg_commitments = 3 [(ethereum.eth.ext.ssz_size) = "max_blobs_per_block.size,48"];
-    repeated bytes segment_kzg_proofs = 4 [(ethereum.eth.ext.ssz_size) = "max_blobs_per_block.size,48"];
+    repeated bytes segments = 2 [(ethereum.eth.ext.ssz_max) = "max_blobs_per_block.size,segment.size"];
+    repeated bytes blob_kzg_commitments = 3 [(ethereum.eth.ext.ssz_max) = "max_blobs_per_block.size,48"];
+    repeated bytes segment_kzg_proofs = 4 [(ethereum.eth.ext.ssz_max) = "max_blobs_per_block.size,48"];
     SignedBeaconBlockHeader signed_block_header = 5;
-    repeated bytes commitment_inclusion_proof = 6  [(ethereum.eth.ext.ssz_size) = "kzg_commitment_inclusion_proof_depth.size,32"];
+    repeated KzgCommitmentInclusionProof commitment_inclusion_proofs = 6  [(ethereum.eth.ext.ssz_max) = "max_blobs_per_block.size"];
+    bytes commitments_hash = 7 [(ethereum.eth.ext.ssz_size) = "32"];
 }
 
 message ColumnSidecars {
