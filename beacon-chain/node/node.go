@@ -1037,6 +1037,7 @@ func (b *BeaconNode) registerRPCService(router *mux.Router) error {
 		Router:                        router,
 		ClockWaiter:                   b.clockWaiter,
 		BlobStorage:                   b.BlobStorage,
+		ColumnStorage:                 b.ColumnStorage,
 		TrackedValidatorsCache:        b.trackedValidatorsCache,
 		PayloadIDCache:                b.payloadIDCache,
 	})

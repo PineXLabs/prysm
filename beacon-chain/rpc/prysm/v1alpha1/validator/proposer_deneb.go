@@ -119,7 +119,6 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 		log.Debugf("In buildColumnSidecars, BlobsToColumns failed, error is %s\n", err.Error())
 		return nil, err
 	}
-	log.Debugf("In buildColumnSidecars, BlobsToColumns ok, len(colSidecars) is %d\n", len(colSidecars))
 	if len(colSidecars) > 0 {
 		for i, com := range colSidecars[0].Commitments {
 			comStr := fmt.Sprintf("0x%x", das.MarshalCommitment(&com))
@@ -152,17 +151,17 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
 	for i := range denebBlk.Block.Body.BlobKzgCommitments {
 		proof, err := blocks.MerkleProofKZGCommitment(body, i) //todo: generate merkle tree once
-		log.Debugf("proof for commitment %d is %v", i, proof)
+		//log.Debugf("proof for commitment %d is %v", i, proof)
 		if err != nil {
 			return nil, err
 		}
 		kProof := &ethpb.KzgCommitmentInclusionProof{
 			CommitmentInclusionProof: proof,
 		}
-		log.Debugf("kProof for commitment %d is %v", i, kProof)
+		//log.Debugf("kProof for commitment %d is %v", i, kProof)
 		commitmentInclusionProofs = append(commitmentInclusionProofs, kProof)
 	}
-	log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
+	//log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
 
 	columnSidecars := make([]*ethpb.ColumnSidecar, len(colSidecars))
 	for i := range colSidecars {
