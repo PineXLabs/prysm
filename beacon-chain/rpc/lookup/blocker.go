@@ -266,7 +266,7 @@ func (p *BeaconDbBlocker) Blobs(ctx context.Context, id string, indices []uint64
 	return blobs, nil
 }
 
-// Columns returns the blobs for a given block id identifier and column indices. The identifier can be one of:
+// Columns returns the columns for a given block id identifier and column indices. The identifier can be one of:
 //   - "head" (canonical head in node's view)
 //   - "genesis"
 //   - "finalized"
@@ -324,7 +324,7 @@ func (p *BeaconDbBlocker) Columns(ctx context.Context, id string, indices []uint
 				return nil, &core.RpcError{Err: errors.Wrap(err, "could not calculate Deneb start slot"), Reason: core.Internal}
 			}
 			if primitives.Slot(slot) < denebStart {
-				return nil, &core.RpcError{Err: errors.New("blobs are not supported before Deneb fork"), Reason: core.BadRequest}
+				return nil, &core.RpcError{Err: errors.New("columns are not supported before Deneb fork"), Reason: core.BadRequest}
 			}
 			ok, roots, err := p.BeaconDB.BlockRootsBySlot(ctx, primitives.Slot(slot))
 			if !ok {
@@ -357,20 +357,24 @@ func (p *BeaconDbBlocker) Columns(ctx context.Context, id string, indices []uint
 		return nil, &core.RpcError{Err: errors.Wrap(err, "failed to retrieve block from db"), Reason: core.Internal}
 	}
 	// if block is not in the retention window  return 200 w/ empty list
-	if !params.WithinDAPeriod(slots.ToEpoch(b.Block().Slot()), slots.ToEpoch(p.GenesisTimeFetcher.CurrentSlot())) {
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(b.Block().Slot()), slots.ToEpoch(p.GenesisTimeFetcher.CurrentSlot())) {
+		log.Debugf("func (p *BeaconDbBlocker) Columns, not in retention window")
 		return make([]*blocks.VerifiedROColumn, 0), nil
 	}
 	commitments, err := b.Block().Body().BlobKzgCommitments()
 	if err != nil {
+		log.Errorf("func (p *BeaconDbBlocker) Columns, failed to retrieve kzg commitments from block")
 		return nil, &core.RpcError{Err: errors.Wrap(err, "failed to retrieve kzg commitments from block"), Reason: core.Internal}
 	}
 	// if there are no commitments return 200 w/ empty list
 	if len(commitments) == 0 {
+		log.Errorf("func (p *BeaconDbBlocker) Columns, commitments is null")
 		return make([]*blocks.VerifiedROColumn, 0), nil
 	}
 	if len(indices) == 0 {
 		m, err := p.ColumnStorage.Indices(bytesutil.ToBytes32(root))
 		if err != nil {
+			log.Errorf("func (p *BeaconDbBlocker) Columns, p.ColumnStorage.Indices, could not retrieve column indices for root %#x", root)
 			log.WithFields(log.Fields{
 				"blockRoot": hexutil.Encode(root),
 			}).Error(errors.Wrapf(err, "could not retrieve column indices for root %#x", root))

@@ -209,6 +209,7 @@ func ConfigToYaml(cfg *BeaconChainConfig) []byte {
 		fmt.Sprintf("DEPOSIT_CONTRACT_ADDRESS: %s", cfg.DepositContractAddress),
 		fmt.Sprintf("MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT: %d", cfg.MaxPerEpochActivationChurnLimit),
 		fmt.Sprintf("MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS: %d", cfg.MinEpochsForBlobsSidecarsRequest),
+		fmt.Sprintf("MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS: %d", cfg.MinEpochsForColumnsSidecarsRequest),
 		fmt.Sprintf("MAX_REQUEST_BLOCKS_DENEB: %d", cfg.MaxRequestBlocksDeneb),
 		fmt.Sprintf("MAX_REQUEST_BLOB_SIDECARS: %d", cfg.MaxRequestBlobSidecars),
 		fmt.Sprintf("BLOB_SIDECAR_SUBNET_COUNT: %d", cfg.BlobsidecarSubnetCount),

@@ -7,6 +7,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/beacon"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/blob"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/builder"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/column"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/config"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/debug"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/events"
@@ -42,6 +43,7 @@ func (s *Service) endpoints(
 	endpoints = append(endpoints, s.rewardsEndpoints(blocker, stater, rewardFetcher)...)
 	endpoints = append(endpoints, s.builderEndpoints(stater)...)
 	endpoints = append(endpoints, s.blobEndpoints(blocker)...)
+	endpoints = append(endpoints, s.columnEndpoints(blocker)...)
 	endpoints = append(endpoints, s.validatorEndpoints(validatorServer, stater, coreService, rewardFetcher)...)
 	endpoints = append(endpoints, s.nodeEndpoints()...)
 	endpoints = append(endpoints, s.beaconEndpoints(ch, stater, blocker, validatorServer, coreService)...)
@@ -120,6 +122,22 @@ func (s *Service) blobEndpoints(blocker lookup.Blocker) []endpoint {
 			template: "/eth/v1/beacon/blob_sidecars/{block_id}",
 			name:     namespace + ".Blobs",
 			handler:  server.Blobs,
+			methods:  []string{http.MethodGet},
+		},
+	}
+}
+
+func (s *Service) columnEndpoints(blocker lookup.Blocker) []endpoint {
+	server := &column.Server{
+		Blocker: blocker,
+	}
+
+	const namespace = "column"
+	return []endpoint{
+		{
+			template: "/eth/v1/beacon/column_sidecars/{block_id}",
+			name:     namespace + ".Columns",
+			handler:  server.Columns,
 			methods:  []string{http.MethodGet},
 		},
 	}
