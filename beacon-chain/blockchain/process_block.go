@@ -526,10 +526,12 @@ func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected 
 	if len(expected) > fieldparams.MaxBlobsPerBlock {
 		return nil, errMaxBlobsExceeded
 	}
-	indices, err := cs.Indices(root) //todo: to confirm
+	//log.Debugf("func missingColumnIndices, before cs.Indices(root), root is %s", root)
+	indices, err := cs.Indices(root)
 	if err != nil {
 		return nil, err
 	}
+	//log.Debugf("func missingColumnIndices, after cs.Indices(root), len(indices) is %d", len(indices))
 	missing := make(map[uint64]struct{}, fieldparams.MaxColumnsPerBlock)
 	for i := 0; i < fieldparams.MaxColumnsPerBlock; i++ {
 		ui := uint64(i)

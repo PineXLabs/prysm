@@ -61,6 +61,10 @@ func Test_endpoints(t *testing.T) {
 		"/eth/v1/beacon/blob_sidecars/{block_id}": {http.MethodGet},
 	}
 
+	columnRoutes := map[string][]string{
+		"/eth/v1/beacon/column_sidecars/{block_id}": {http.MethodGet},
+	}
+
 	configRoutes := map[string][]string{
 		"/eth/v1/config/fork_schedule":    {http.MethodGet},
 		"/eth/v1/config/spec":             {http.MethodGet},
