@@ -264,6 +264,7 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	MinEpochsForBlobsSidecarsRequest:   4096,
 	MinEpochsForColumnsSidecarsRequest: 4096,
 	MaxRequestBlobSidecars:             768,
+	MaxRequestColumnSidecars:           768,
 	MaxRequestBlocksDeneb:              128,
 
 	// Values related to networking parameters.
