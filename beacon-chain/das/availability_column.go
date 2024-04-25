@@ -16,44 +16,40 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	errMixedRoots = errors.New("Sidecars must all be for the same block")
-)
-
 // LazilyPersistentStore is an implementation of AvailabilityStore to be used when batch syncing.
 // This implementation will hold any blobs passed to Persist until the IsDataAvailable is called for their
 // block, at which time they will undergo full verification and be saved to the disk.
-type LazilyPersistentStore struct {
-	store    *filesystem.BlobStorage
-	cache    *cache
-	verifier BlobBatchVerifier
+type ColumnLazilyPersistentStore struct {
+	store    *filesystem.ColumnStorage
+	cache    *columnCache
+	verifier ColumnBatchVerifier
 }
 
-var _ AvailabilityStore = &LazilyPersistentStore{}
+var _ ColumnAvailabilityStore = &ColumnLazilyPersistentStore{}
 
-// BlobBatchVerifier enables LazyAvailabilityStore to manage the verification process
-// going from ROBlob->VerifiedROBlob, while avoiding the decision of which individual verifications
-// to run and in what order. Since LazilyPersistentStore always tries to verify and save blobs only when
-// they are all available, the interface takes a slice of blobs, enabling the implementation to optimize
+// ColumnBatchVerifier enables LazyAvailabilityStore to manage the verification process
+// going from ROColumn->VerifiedROColumn, while avoiding the decision of which individual verifications
+// to run and in what order. Since ColumnLazilyPersistentStore always tries to verify and save columns only when
+// they are all available, the interface takes a slice of columns, enabling the implementation to optimize
 // batch verification.
-type BlobBatchVerifier interface {
-	VerifiedROBlobs(ctx context.Context, blk blocks.ROBlock, sc []blocks.ROBlob) ([]blocks.VerifiedROBlob, error)
+type ColumnBatchVerifier interface {
+	VerifiedROColumns(ctx context.Context, blk blocks.ROBlock, sc []blocks.ROColumn) ([]blocks.VerifiedROColumn, error)
 }
 
-// NewLazilyPersistentStore creates a new LazilyPersistentStore. This constructor should always be used
-// when creating a LazilyPersistentStore because it needs to initialize the cache under the hood.
-func NewLazilyPersistentStore(store *filesystem.BlobStorage, verifier BlobBatchVerifier) *LazilyPersistentStore {
-	return &LazilyPersistentStore{
+// NewColumnLazilyPersistentStore creates a new ColumnLazilyPersistentStore. This constructor should always be used
+// when creating a ColumnLazilyPersistentStore because it needs to initialize the cache under the hood.
+func NewColumnLazilyPersistentStore(store *filesystem.ColumnStorage, verifier ColumnBatchVerifier) *ColumnLazilyPersistentStore {
+	return &ColumnLazilyPersistentStore{
 		store:    store,
-		cache:    newCache(),
+		cache:    newColumnCache(),
 		verifier: verifier,
 	}
 }
 
-// Persist adds blobs to the working blob cache. Blobs stored in this cache will be persisted
-// for at least as long as the node is running. Once IsDataAvailable succeeds, all blobs referenced
+// Persist adds columns to the working column cache. columns stored in this cache will be persisted
+// for at least as long as the node is running. Once IsDataAvailable succeeds, all columns referenced
 // by the given block are guaranteed to be persisted for the remainder of the retention period.
-func (s *LazilyPersistentStore) Persist(current primitives.Slot, sc ...blocks.ROBlob) error {
+func (s *ColumnLazilyPersistentStore) Persist(current primitives.Slot, sc ...blocks.ROColumn) error {
 	if len(sc) == 0 {
 		return nil
 	}
@@ -65,10 +61,10 @@ func (s *LazilyPersistentStore) Persist(current primitives.Slot, sc ...blocks.RO
 			}
 		}
 	}
-	if !params.WithinDAPeriod(slots.ToEpoch(sc[0].Slot()), slots.ToEpoch(current)) {
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(sc[0].Slot()), slots.ToEpoch(current)) {
 		return nil
 	}
-	key := keyFromSidecar(sc[0])
+	key := keyFromColumnSidecar(sc[0])
 	entry := s.cache.ensure(key)
 	for i := range sc {
 		if err := entry.stash(&sc[i]); err != nil {
@@ -80,8 +76,8 @@ func (s *LazilyPersistentStore) Persist(current primitives.Slot, sc ...blocks.RO
 
 // IsDataAvailable returns nil if all the commitments in the given block are persisted to the db and have been verified.
 // BlobSidecars already in the db are assumed to have been previously verified against the block.
-func (s *LazilyPersistentStore) IsDataAvailable(ctx context.Context, current primitives.Slot, b blocks.ROBlock) error {
-	blockCommitments, err := commitmentsToCheck(b, current)
+func (s *ColumnLazilyPersistentStore) IsDataAvailable(ctx context.Context, current primitives.Slot, b blocks.ROBlock) error {
+	blockCommitments, err := commitmentsToColumnCheck(b, current)
 	if err != nil {
 		return errors.Wrapf(err, "could check data availability for block %#x", b.Root())
 	}
@@ -99,11 +95,11 @@ func (s *LazilyPersistentStore) IsDataAvailable(ctx context.Context, current pri
 	// ignore their response and decrease their peer score.
 	sidecars, err := entry.filter(root, blockCommitments)
 	if err != nil {
-		return errors.Wrap(err, "incomplete BlobSidecar batch")
+		return errors.Wrap(err, "incomplete ColumnSidecar batch")
 	}
-	// Do thorough verifications of each BlobSidecar for the block.
-	// Same as above, we don't save BlobSidecars if there are any problems with the batch.
-	vscs, err := s.verifier.VerifiedROBlobs(ctx, b, sidecars)
+	// Do thorough verifications of each ColumnSidecar for the block.
+	// Same as above, we don't save ColumnSidecars if there are any problems with the batch.
+	vscs, err := s.verifier.VerifiedROColumns(ctx, b, sidecars)
 	if err != nil {
 		var me verification.VerificationMultiError
 		ok := errors.As(err, &me)
@@ -113,28 +109,28 @@ func (s *LazilyPersistentStore) IsDataAvailable(ctx context.Context, current pri
 			for i := range fails {
 				lf[fmt.Sprintf("fail_%d", i)] = fails[i].Error()
 			}
-			log.WithFields(lf).WithFields(logging.BlockFieldsFromBlob(sidecars[0])).
-				Debug("invalid BlobSidecars received")
+			log.WithFields(lf).WithFields(logging.BlockFieldsFromColumn(sidecars[0])).
+				Debug("invalid ColumnSidecars received")
 		}
-		return errors.Wrapf(err, "invalid BlobSidecars received for block %#x", root)
+		return errors.Wrapf(err, "invalid ColumnSidecars received for block %#x", root)
 	}
-	// Ensure that each BlobSidecar is written to disk.
+	// Ensure that each ColumnSidecar is written to disk.
 	for i := range vscs {
 		if err := s.store.Save(vscs[i]); err != nil {
-			return errors.Wrapf(err, "failed to save BlobSidecar index %d for block %#x", vscs[i].Index, root)
+			return errors.Wrapf(err, "failed to save ColumnSidecar index %d for block %#x", vscs[i].Index, root)
 		}
 	}
-	// All BlobSidecars are persisted - da check succeeds.
+	// All ColumnSidecars are persisted - da check succeeds.
 	return nil
 }
 
-func commitmentsToCheck(b blocks.ROBlock, current primitives.Slot) (safeCommitmentArray, error) {
-	var ar safeCommitmentArray
+func commitmentsToColumnCheck(b blocks.ROBlock, current primitives.Slot) (columnSafeCommitmentArray, error) {
+	var ar columnSafeCommitmentArray
 	if b.Version() < version.Deneb {
 		return ar, nil
 	}
 	// We are only required to check within MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS
-	if !params.WithinDAPeriod(slots.ToEpoch(b.Block().Slot()), slots.ToEpoch(current)) {
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(b.Block().Slot()), slots.ToEpoch(current)) {
 		return ar, nil
 	}
 	kc, err := b.Block().Body().BlobKzgCommitments()

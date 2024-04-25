@@ -226,6 +226,7 @@ type BeaconChainConfig struct {
 	MinEpochsForBlobsSidecarsRequest   primitives.Epoch `yaml:"MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS" spec:"true"`   // MinEpochsForBlobsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
 	MinEpochsForColumnsSidecarsRequest primitives.Epoch `yaml:"MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS" spec:"true"` // MinEpochsForColumnsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
 	MaxRequestBlobSidecars             uint64           `yaml:"MAX_REQUEST_BLOB_SIDECARS" spec:"true"`               // MaxRequestBlobSidecars is the maximum number of blobs to request in a single request.
+	MaxRequestColumnSidecars           uint64           `yaml:"MAX_REQUEST_COLUMN_SIDECARS" spec:"true"`             // MaxRequestColumnSidecars is the maximum number of columns to request in a single request.
 	MaxRequestBlocksDeneb              uint64           `yaml:"MAX_REQUEST_BLOCKS_DENEB" spec:"true"`                // MaxRequestBlocksDeneb is the maximum number of blocks in a single request after the deneb epoch.
 
 	// Networking Specific Parameters

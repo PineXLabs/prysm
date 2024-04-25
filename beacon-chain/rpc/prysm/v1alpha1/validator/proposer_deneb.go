@@ -166,12 +166,13 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	columnSidecars := make([]*ethpb.ColumnSidecar, len(colSidecars))
 	for i := range colSidecars {
 		columnSidecars[i] = &ethpb.ColumnSidecar{
-			Index:              uint64(colSidecars[i].ColumnNumber),
-			Segments:           MarshalSegmentDataList(colSidecars[i].SegmentDataList),
-			BlobKzgCommitments: MarshalCommitments(colSidecars[i].Commitments),
-			SegmentKzgProofs:   MarshalProofs(colSidecars[i].Proofs),
-			SignedBlockHeader:  header,
-			CommitmentsHash:    commitmentsHash[:],
+			Index:                     uint64(colSidecars[i].ColumnNumber),
+			Segments:                  MarshalSegmentDataList(colSidecars[i].SegmentDataList),
+			BlobKzgCommitments:        MarshalCommitments(colSidecars[i].Commitments),
+			SegmentKzgProofs:          MarshalProofs(colSidecars[i].Proofs),
+			SignedBlockHeader:         header,
+			CommitmentInclusionProofs: commitmentInclusionProofs,
+			CommitmentsHash:           commitmentsHash[:],
 		}
 	}
 	return columnSidecars, nil

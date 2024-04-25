@@ -128,8 +128,14 @@ func (m *ErrorMessage) UnmarshalSSZ(buf []byte) error {
 // BlobSidecarsByRootReq is used to specify a list of blob targets (root+index) in a BlobSidecarsByRoot RPC request.
 type BlobSidecarsByRootReq []*eth.BlobIdentifier
 
+// ColumnSidecarsByRootReq is used to specify a list of column targets (root+index) in a ColumnSidecarsByRoot RPC request.
+type ColumnSidecarsByRootReq []*eth.ColumnIdentifier
+
 // BlobIdentifier is a fixed size value, so we can compute its fixed size at start time (see init below)
 var blobIdSize int
+
+// ColumnIdentifier is a fixed size value, so we can compute its fixed size at start time (see init below)
+var columnIdSize int
 
 // SizeSSZ returns the size of the serialized representation.
 func (b *BlobSidecarsByRootReq) SizeSSZ() int {
@@ -210,4 +216,82 @@ func (s BlobSidecarsByRootReq) Len() int {
 func init() {
 	sizer := &eth.BlobIdentifier{}
 	blobIdSize = sizer.SizeSSZ()
+	columnSizer := &eth.ColumnIdentifier{}
+	columnIdSize = columnSizer.SizeSSZ()
+}
+
+// SizeSSZ returns the size of the serialized representation.
+func (c *ColumnSidecarsByRootReq) SizeSSZ() int {
+	return len(*c) * columnIdSize
+}
+
+// MarshalSSZTo appends the serialized ColumnSidecarsByRootReq value to the provided byte slice.
+func (c *ColumnSidecarsByRootReq) MarshalSSZTo(dst []byte) ([]byte, error) {
+	// A List without an enclosing container is marshaled exactly like a vector, no length offset required.
+	marshalledObj, err := c.MarshalSSZ()
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, marshalledObj...), nil
+}
+
+// MarshalSSZ serializes the ColumnSidecarsByRootReq value to a byte slice.
+func (b *ColumnSidecarsByRootReq) MarshalSSZ() ([]byte, error) {
+	buf := make([]byte, len(*b)*columnIdSize)
+	for i, id := range *b {
+		by, err := id.MarshalSSZ()
+		if err != nil {
+			return nil, err
+		}
+		copy(buf[i*columnIdSize:(i+1)*columnIdSize], by)
+	}
+	return buf, nil
+}
+
+// UnmarshalSSZ unmarshals the provided bytes buffer into the
+// ColumnSidecarsByRootReq value.
+func (b *ColumnSidecarsByRootReq) UnmarshalSSZ(buf []byte) error {
+	bufLen := len(buf)
+	maxLength := int(params.BeaconConfig().MaxRequestColumnSidecars) * columnIdSize
+	if bufLen > maxLength {
+		return errors.Errorf("expected buffer with length of up to %d but received length %d", maxLength, bufLen)
+	}
+	if bufLen%columnIdSize != 0 {
+		return errors.Wrapf(ssz.ErrIncorrectByteSize, "size=%d", bufLen)
+	}
+	count := bufLen / columnIdSize
+	*b = make([]*eth.ColumnIdentifier, count)
+	for i := 0; i < count; i++ {
+		id := &eth.ColumnIdentifier{}
+		err := id.UnmarshalSSZ(buf[i*columnIdSize : (i+1)*columnIdSize])
+		if err != nil {
+			return err
+		}
+		(*b)[i] = id
+	}
+	return nil
+}
+
+var _ sort.Interface = ColumnSidecarsByRootReq{}
+
+// Less reports whether the element with index i must sort before the element with index j.
+// ColumnIdentifier will be sorted in lexicographic order by root, with Column Index as tiebreaker for a given root.
+func (s ColumnSidecarsByRootReq) Less(i, j int) bool {
+	rootCmp := bytes.Compare(s[i].BlockRoot, s[j].BlockRoot)
+	if rootCmp != 0 {
+		// They aren't equal; return true if i < j, false if i > j.
+		return rootCmp < 0
+	}
+	// They are equal; column index is the tie breaker.
+	return s[i].Index < s[j].Index
+}
+
+// Swap swaps the elements with indexes i and j.
+func (s ColumnSidecarsByRootReq) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+// Len is the number of elements in the collection.
+func (s ColumnSidecarsByRootReq) Len() int {
+	return len(s)
 }

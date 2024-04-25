@@ -15,34 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	RequireBlobIndexInBounds Requirement = iota
-	RequireNotFromFutureSlot
-	RequireSlotAboveFinalized
-	RequireValidProposerSignature
-	RequireSidecarParentSeen
-	RequireSidecarParentValid
-	RequireSidecarParentSlotLower
-	RequireSidecarDescendsFromFinalized
-	RequireSidecarInclusionProven
-	RequireSidecarKzgProofVerified
-	RequireSidecarProposerExpected
-)
-
-var allSidecarRequirements = []Requirement{
-	RequireBlobIndexInBounds,
-	RequireNotFromFutureSlot,
-	RequireSlotAboveFinalized,
-	RequireValidProposerSignature,
-	RequireSidecarParentSeen,
-	RequireSidecarParentValid,
-	RequireSidecarParentSlotLower,
-	RequireSidecarDescendsFromFinalized,
-	RequireSidecarInclusionProven,
-	RequireSidecarKzgProofVerified,
-	RequireSidecarProposerExpected,
-}
-
 // GossipSidecarRequirements defines the set of requirements that BlobSidecars received on gossip
 // must satisfy in order to upgrade an ROBlob to a VerifiedROBlob.
 var GossipSidecarRequirements = requirementList(allSidecarRequirements).excluding()
@@ -72,32 +44,6 @@ var BackfillSidecarRequirements = requirementList(InitsyncSidecarRequirements).e
 
 // PendingQueueSidecarRequirements is the same as InitsyncSidecarRequirements, used by the pending blocks queue.
 var PendingQueueSidecarRequirements = requirementList(InitsyncSidecarRequirements).excluding()
-
-var (
-	ErrBlobInvalid = errors.New("blob failed verification")
-	// ErrBlobIndexInvalid means RequireBlobIndexInBounds failed.
-	ErrBlobIndexInvalid = errors.Wrap(ErrBlobInvalid, "incorrect blob sidecar index")
-	// ErrFromFutureSlot means RequireSlotNotTooEarly failed.
-	ErrFromFutureSlot = errors.Wrap(ErrBlobInvalid, "slot is too far in the future")
-	// ErrSlotNotAfterFinalized means RequireSlotAboveFinalized failed.
-	ErrSlotNotAfterFinalized = errors.Wrap(ErrBlobInvalid, "slot <= finalized checkpoint")
-	// ErrInvalidProposerSignature means RequireValidProposerSignature failed.
-	ErrInvalidProposerSignature = errors.Wrap(ErrBlobInvalid, "proposer signature could not be verified")
-	// ErrSidecarParentNotSeen means RequireSidecarParentSeen failed.
-	ErrSidecarParentNotSeen = errors.Wrap(ErrBlobInvalid, "parent root has not been seen")
-	// ErrSidecarParentInvalid means RequireSidecarParentValid failed.
-	ErrSidecarParentInvalid = errors.Wrap(ErrBlobInvalid, "parent block is not valid")
-	// ErrSlotNotAfterParent means RequireSidecarParentSlotLower failed.
-	ErrSlotNotAfterParent = errors.Wrap(ErrBlobInvalid, "slot <= slot")
-	// ErrSidecarNotFinalizedDescendent means RequireSidecarDescendsFromFinalized failed.
-	ErrSidecarNotFinalizedDescendent = errors.Wrap(ErrBlobInvalid, "blob parent is not descended from the finalized block")
-	// ErrSidecarInclusionProofInvalid means RequireSidecarInclusionProven failed.
-	ErrSidecarInclusionProofInvalid = errors.Wrap(ErrBlobInvalid, "sidecar inclusion proof verification failed")
-	// ErrSidecarKzgProofInvalid means RequireSidecarKzgProofVerified failed.
-	ErrSidecarKzgProofInvalid = errors.Wrap(ErrBlobInvalid, "sidecar kzg commitment proof verification failed")
-	// ErrSidecarUnexpectedProposer means RequireSidecarProposerExpected failed.
-	ErrSidecarUnexpectedProposer = errors.Wrap(ErrBlobInvalid, "sidecar was not proposed by the expected proposer_index")
-)
 
 type ROBlobVerifier struct {
 	*sharedResources

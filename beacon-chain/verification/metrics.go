@@ -14,3 +14,13 @@ var (
 		[]string{"result"},
 	)
 )
+
+var (
+	columnVerificationProposerSignatureCache = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "column_verification_proposer_signature_cache",
+			Help: "ColumnSidecar proposer signature cache result.",
+		},
+		[]string{"result"},
+	)
+)

@@ -479,6 +479,15 @@ func (s *Service) HeaderByNumber(ctx context.Context, number *big.Int) (*types.H
 	if err == nil && hdr == nil {
 		err = ethereum.NotFound
 	}
+	if number == nil {
+		log.WithFields(logrus.Fields{
+			"number": "nil",
+		}).Info("Call BlockByNumberMethod")
+	} else {
+		log.WithFields(logrus.Fields{
+			"number": number.Int64(),
+		}).Info("Call BlockByNumberMethod")
+	}
 	return hdr, err
 }
 
