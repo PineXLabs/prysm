@@ -2,7 +2,7 @@ module github.com/prysmaticlabs/prysm/v5
 
 go 1.22.0
 
-replace github.com/crate-crypto/go-kzg-4844 => ../das/go-kzg-4844
+replace github.com/crate-crypto/go-kzg-4844 => ../das/go-kzg-4844-prysm
 
 replace github.com/PineXLabs/das => ../das
 
