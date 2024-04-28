@@ -96,6 +96,7 @@ type config struct {
 	clock                         *startup.Clock
 	stateNotifier                 statefeed.Notifier
 	blobStorage                   *filesystem.BlobStorage
+	columnStorage                 *filesystem.ColumnStorage
 }
 
 // This defines the interface for interacting with block chain service

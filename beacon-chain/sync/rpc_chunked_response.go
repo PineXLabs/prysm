@@ -175,3 +175,22 @@ func WriteBlobSidecarChunk(stream libp2pcore.Stream, tor blockchain.TemporalOrac
 	_, err = encoding.EncodeWithMaxLength(stream, sidecar)
 	return err
 }
+
+// WriteColumnSidecarChunk writes column chunk object to stream.
+// response_chunk  ::= <result> | <context-bytes> | <encoding-dependent-header> | <encoded-payload>
+func WriteColumnSidecarChunk(stream libp2pcore.Stream, tor blockchain.TemporalOracle, encoding encoder.NetworkEncoding, sidecar blocks.VerifiedROColumn) error {
+	if _, err := stream.Write([]byte{responseCodeSuccess}); err != nil {
+		return err
+	}
+	valRoot := tor.GenesisValidatorsRoot()
+	ctxBytes, err := forks.ForkDigestFromEpoch(slots.ToEpoch(sidecar.Slot()), valRoot[:])
+	if err != nil {
+		return err
+	}
+
+	if err := writeContextToStream(ctxBytes[:], stream); err != nil {
+		return err
+	}
+	_, err = encoding.EncodeWithMaxLength(stream, sidecar)
+	return err
+}

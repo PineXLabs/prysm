@@ -84,15 +84,22 @@ type blocksQueue struct {
 	exitConditions      struct {
 		noRequiredPeersErrRetries int
 	}
-	fetchedData chan *blocksQueueFetchedData // output channel for ready blocks
-	staleEpochs map[primitives.Epoch]uint8   // counter to keep track of stale FSMs
-	quit        chan struct{}                // termination notifier
+	//fetchedData chan *blocksQueueFetchedData // output channel for ready blocks
+	fetchedColumnData chan *blocksQueueFetchedColumnData // output channel for ready blocks
+	staleEpochs       map[primitives.Epoch]uint8         // counter to keep track of stale FSMs
+	quit              chan struct{}                      // termination notifier
 }
 
 // blocksQueueFetchedData is a data container that is returned from a queue on each step.
 type blocksQueueFetchedData struct {
 	pid peer.ID
 	bwb []blocks.BlockWithROBlobs
+}
+
+// blocksQueueFetchedColumnData is a data container that is returned from a queue on each step.
+type blocksQueueFetchedColumnData struct {
+	pid peer.ID
+	bwc []blocks.BlockWithROColumns
 }
 
 // newBlocksQueue creates initialized priority queue.
@@ -128,9 +135,10 @@ func newBlocksQueue(ctx context.Context, cfg *blocksQueueConfig) *blocksQueue {
 		blocksFetcher:       blocksFetcher,
 		chain:               cfg.chain,
 		mode:                cfg.mode,
-		fetchedData:         make(chan *blocksQueueFetchedData, 1),
-		quit:                make(chan struct{}),
-		staleEpochs:         make(map[primitives.Epoch]uint8),
+		//fetchedData:         make(chan *blocksQueueFetchedData, 1),
+		fetchedColumnData: make(chan *blocksQueueFetchedColumnData, 1),
+		quit:              make(chan struct{}),
+		staleEpochs:       make(map[primitives.Epoch]uint8),
 	}
 
 	// Configure state machines.
@@ -172,7 +180,7 @@ func (q *blocksQueue) loop() {
 
 	defer func() {
 		q.blocksFetcher.stop()
-		close(q.fetchedData)
+		close(q.fetchedColumnData)
 	}()
 
 	if err := q.blocksFetcher.start(); err != nil {
@@ -337,7 +345,7 @@ func (q *blocksQueue) onDataReceivedEvent(ctx context.Context) eventHandlerFn {
 			return m.state, response.err
 		}
 		m.pid = response.pid
-		m.bwb = response.bwb
+		m.bwc = response.bwc
 		return stateDataParsed, nil
 	}
 }
@@ -357,14 +365,14 @@ func (q *blocksQueue) onReadyToSendEvent(ctx context.Context) eventHandlerFn {
 		}
 
 		send := func() (stateID, error) {
-			data := &blocksQueueFetchedData{
+			data := &blocksQueueFetchedColumnData{
 				pid: m.pid,
-				bwb: m.bwb,
+				bwc: m.bwc,
 			}
 			select {
 			case <-ctx.Done():
 				return m.state, ctx.Err()
-			case q.fetchedData <- data:
+			case q.fetchedColumnData <- data:
 			}
 			return stateSent, nil
 		}

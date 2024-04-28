@@ -47,6 +47,7 @@ type stateMachine struct {
 	state   stateID
 	pid     peer.ID
 	bwb     []blocks.BlockWithROBlobs
+	bwc     []blocks.BlockWithROColumns
 	updated time.Time
 }
 
