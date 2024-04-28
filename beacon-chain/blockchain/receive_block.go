@@ -38,7 +38,9 @@ var epochsSinceFinalityExpandCache = primitives.Epoch(4)
 // BlockReceiver interface defines the methods of chain service for receiving and processing new blocks.
 type BlockReceiver interface {
 	ReceiveBlock(ctx context.Context, block interfaces.ReadOnlySignedBeaconBlock, blockRoot [32]byte, avs das.AvailabilityStore) error
+	ReceiveBlock2(ctx context.Context, block interfaces.ReadOnlySignedBeaconBlock, blockRoot [32]byte, avs das.ColumnAvailabilityStore) error
 	ReceiveBlockBatch(ctx context.Context, blocks []blocks.ROBlock, avs das.AvailabilityStore) error
+	ReceiveBlockBatch2(ctx context.Context, blocks []blocks.ROBlock, avs das.ColumnAvailabilityStore) error
 	HasBlock(ctx context.Context, root [32]byte) bool
 	RecentBlockSlot(root [32]byte) (primitives.Slot, error)
 	BlockBeingSynced([32]byte) bool
@@ -234,6 +236,179 @@ func (s *Service) ReceiveBlock(ctx context.Context, block interfaces.ReadOnlySig
 	return nil
 }
 
+// ReceiveBlock2 is a function that defines the operations (minus pubsub)
+// that are performed on a received block. The operations consist of:
+//  1. Validate block, apply state transition and update checkpoints
+//  2. Apply fork choice to the processed block
+//  3. Save latest head info
+func (s *Service) ReceiveBlock2(ctx context.Context, block interfaces.ReadOnlySignedBeaconBlock, blockRoot [32]byte, avs das.ColumnAvailabilityStore) error {
+	ctx, span := trace.StartSpan(ctx, "blockChain.ReceiveBlock")
+	defer span.End()
+	// Return early if the block has been synced
+	if s.InForkchoice(blockRoot) {
+		log.WithField("blockRoot", fmt.Sprintf("%#x", blockRoot)).Debug("Ignoring already synced block")
+		return nil
+	}
+	receivedTime := time.Now()
+	s.blockBeingSynced.set(blockRoot)
+	defer s.blockBeingSynced.unset(blockRoot)
+
+	blockCopy, err := block.Copy()
+	if err != nil {
+		return err
+	}
+	rob, err := blocks.NewROBlockWithRoot(block, blockRoot)
+	if err != nil {
+		return err
+	}
+
+	preState, err := s.getBlockPreState(ctx, blockCopy.Block())
+	if err != nil {
+		return errors.Wrap(err, "could not get block's prestate")
+	}
+	// Save current justified and finalized epochs for future use.
+	currStoreJustifiedEpoch := s.CurrentJustifiedCheckpt().Epoch
+	currStoreFinalizedEpoch := s.FinalizedCheckpt().Epoch
+	currentEpoch := coreTime.CurrentEpoch(preState)
+
+	preStateVersion, preStateHeader, err := getStateVersionAndPayload(preState)
+	if err != nil {
+		return err
+	}
+	eg, _ := errgroup.WithContext(ctx)
+	var postState state.BeaconState
+	eg.Go(func() error {
+		var err error
+		postState, err = s.validateStateTransition(ctx, preState, blockCopy)
+		if err != nil {
+			return errors.Wrap(err, "failed to validate consensus state transition function")
+		}
+		return nil
+	})
+	var isValidPayload bool
+	eg.Go(func() error {
+		var err error
+		isValidPayload, err = s.validateExecutionOnBlock(ctx, preStateVersion, preStateHeader, blockCopy, blockRoot)
+		if err != nil {
+			return errors.Wrap(err, "could not notify the engine of the new payload")
+		}
+		return nil
+	})
+	if err := eg.Wait(); err != nil {
+		return err
+	}
+	daStartTime := time.Now()
+	if avs != nil {
+		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), rob); err != nil { //todo: support blob -> column
+			errWrap := errors.Wrap(err, "could not validate column data availability (AvailabilityStore.IsDataAvailable)")
+			log.Errorf(errWrap.Error())
+			return errWrap
+		}
+	} else {
+		if err := s.isDataAvailable(ctx, blockRoot, blockCopy); err != nil {
+			errWrap := errors.Wrap(err, "could not validate column data availability")
+			log.Errorf(errWrap.Error())
+			return errWrap
+		}
+	}
+	daWaitedTime := time.Since(daStartTime)
+	dataAvailWaitedTime.Observe(float64(daWaitedTime.Milliseconds()))
+
+	// Defragment the state before continuing block processing.
+	s.defragmentState(postState)
+
+	// The rest of block processing takes a lock on forkchoice.
+	s.cfg.ForkChoiceStore.Lock()
+	defer s.cfg.ForkChoiceStore.Unlock()
+	if err := s.savePostStateInfo(ctx, blockRoot, blockCopy, postState); err != nil {
+		return errors.Wrap(err, "could not save post state info")
+	}
+	args := &postBlockProcessConfig{
+		ctx:            ctx,
+		signed:         blockCopy,
+		blockRoot:      blockRoot,
+		postState:      postState,
+		isValidPayload: isValidPayload,
+	}
+	if err := s.postBlockProcess(args); err != nil {
+		err := errors.Wrap(err, "could not process block")
+		tracing.AnnotateError(span, err)
+		return err
+	}
+	if coreTime.CurrentEpoch(postState) > currentEpoch && s.cfg.ForkChoiceStore.IsCanonical(blockRoot) {
+		headSt, err := s.HeadState(ctx)
+		if err != nil {
+			return errors.Wrap(err, "could not get head state")
+		}
+		if err := reportEpochMetrics(ctx, postState, headSt); err != nil {
+			log.WithError(err).Error("could not report epoch metrics")
+		}
+	}
+	if err := s.updateJustificationOnBlock(ctx, preState, postState, currStoreJustifiedEpoch); err != nil {
+		return errors.Wrap(err, "could not update justified checkpoint")
+	}
+
+	newFinalized, err := s.updateFinalizationOnBlock(ctx, preState, postState, currStoreFinalizedEpoch)
+	if err != nil {
+		return errors.Wrap(err, "could not update finalized checkpoint")
+	}
+	// Send finalized events and finalized deposits in the background
+	if newFinalized {
+		finalized := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+		go s.sendNewFinalizedEvent(blockCopy, postState)
+		depCtx, cancel := context.WithTimeout(context.Background(), depositDeadline)
+		go func() {
+			s.insertFinalizedDeposits(depCtx, finalized.Root)
+			cancel()
+		}()
+	}
+
+	// If slasher is configured, forward the attestations in the block via an event feed for processing.
+	if features.Get().EnableSlasher {
+		go s.sendBlockAttestationsToSlasher(blockCopy, preState)
+	}
+
+	// Handle post block operations such as pruning exits and bls messages if incoming block is the head
+	if err := s.prunePostBlockOperationPools(ctx, blockCopy, blockRoot); err != nil {
+		log.WithError(err).Error("Could not prune canonical objects from pool ")
+	}
+
+	// Have we been finalizing? Should we start saving hot states to db?
+	if err := s.checkSaveHotStateDB(ctx); err != nil {
+		return err
+	}
+
+	// We apply the same heuristic to some of our more important caches.
+	if err := s.handleCaches(); err != nil {
+		return err
+	}
+
+	// Reports on block and fork choice metrics.
+	cp := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+	finalized := &ethpb.Checkpoint{Epoch: cp.Epoch, Root: bytesutil.SafeCopyBytes(cp.Root[:])}
+	reportSlotMetrics(blockCopy.Block().Slot(), s.HeadSlot(), s.CurrentSlot(), finalized)
+
+	// Log block sync status.
+	cp = s.cfg.ForkChoiceStore.JustifiedCheckpoint()
+	justified := &ethpb.Checkpoint{Epoch: cp.Epoch, Root: bytesutil.SafeCopyBytes(cp.Root[:])}
+	if err := logBlockSyncStatus(blockCopy.Block(), blockRoot, justified, finalized, receivedTime, uint64(s.genesisTime.Unix()), daWaitedTime); err != nil {
+		log.WithError(err).Error("Unable to log block sync status")
+	}
+	// Log payload data
+	if err := logPayload(blockCopy.Block()); err != nil {
+		log.WithError(err).Error("Unable to log debug block payload data")
+	}
+	// Log state transition data.
+	if err := logStateTransitionData(blockCopy.Block()); err != nil {
+		log.WithError(err).Error("Unable to log state transition data")
+	}
+
+	timeWithoutDaWait := time.Since(receivedTime) - daWaitedTime
+	chainServiceProcessingTime.Observe(float64(timeWithoutDaWait.Milliseconds()))
+
+	return nil
+}
+
 // ReceiveBlockBatch processes the whole block batch at once, assuming the block batch is linear ,transitioning
 // the state, performing batch verification of all collected signatures and then performing the appropriate
 // actions for a block post-transition.
@@ -246,6 +421,71 @@ func (s *Service) ReceiveBlockBatch(ctx context.Context, blocks []blocks.ROBlock
 
 	// Apply state transition on the incoming newly received block batches, one by one.
 	if err := s.onBlockBatch(ctx, blocks, avs); err != nil {
+		err := errors.Wrap(err, "could not process block in batch")
+		tracing.AnnotateError(span, err)
+		return err
+	}
+
+	lastBR := blocks[len(blocks)-1].Root()
+	optimistic, err := s.cfg.ForkChoiceStore.IsOptimistic(lastBR)
+	if err != nil {
+		lastSlot := blocks[len(blocks)-1].Block().Slot()
+		log.WithError(err).Errorf("Could not check if block is optimistic, Root: %#x, Slot: %d", lastBR, lastSlot)
+		optimistic = true
+	}
+
+	for _, b := range blocks {
+		blockCopy, err := b.Copy()
+		if err != nil {
+			return err
+		}
+		// Send notification of the processed block to the state feed.
+		s.cfg.StateNotifier.StateFeed().Send(&feed.Event{
+			Type: statefeed.BlockProcessed,
+			Data: &statefeed.BlockProcessedData{
+				Slot:        blockCopy.Block().Slot(),
+				BlockRoot:   b.Root(),
+				SignedBlock: blockCopy,
+				Verified:    true,
+				Optimistic:  optimistic,
+			},
+		})
+
+		// Reports on blockCopy and fork choice metrics.
+		cp := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+		finalized := &ethpb.Checkpoint{Epoch: cp.Epoch, Root: bytesutil.SafeCopyBytes(cp.Root[:])}
+		reportSlotMetrics(blockCopy.Block().Slot(), s.HeadSlot(), s.CurrentSlot(), finalized)
+	}
+
+	if err := s.cfg.BeaconDB.SaveBlocks(ctx, s.getInitSyncBlocks()); err != nil {
+		return err
+	}
+	finalized := s.cfg.ForkChoiceStore.FinalizedCheckpoint()
+	if finalized == nil {
+		return errNilFinalizedInStore
+	}
+	if err := s.wsVerifier.VerifyWeakSubjectivity(s.ctx, finalized.Epoch); err != nil {
+		// log.Fatalf will prevent defer from being called
+		span.End()
+		// Exit run time if the node failed to verify weak subjectivity checkpoint.
+		log.WithError(err).Fatal("Could not verify weak subjectivity checkpoint")
+	}
+
+	return nil
+}
+
+// ReceiveBlockBatch2 processes the whole block batch at once, assuming the block batch is linear ,transitioning
+// the state, performing batch verification of all collected signatures and then performing the appropriate
+// actions for a block post-transition.
+func (s *Service) ReceiveBlockBatch2(ctx context.Context, blocks []blocks.ROBlock, avs das.ColumnAvailabilityStore) error {
+	ctx, span := trace.StartSpan(ctx, "blockChain.ReceiveBlockBatch")
+	defer span.End()
+
+	s.cfg.ForkChoiceStore.Lock()
+	defer s.cfg.ForkChoiceStore.Unlock()
+
+	// Apply state transition on the incoming newly received block batches, one by one.
+	if err := s.onBlockBatch2(ctx, blocks, avs); err != nil {
 		err := errors.Wrap(err, "could not process block in batch")
 		tracing.AnnotateError(span, err)
 		return err

@@ -196,12 +196,12 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Failed to fetch missing columns for checkpoint origin")
 		return
 	}
-	//if err := s.roundRobinSync(gt); err != nil {  //todo: adapt to column sync
-	//	if errors.Is(s.ctx.Err(), context.Canceled) {
-	//		return
-	//	}
-	//	panic(err)
-	//}
+	if err := s.roundRobinSync(gt); err != nil { //todo: adapt to column sync
+		if errors.Is(s.ctx.Err(), context.Canceled) {
+			return
+		}
+		panic(err)
+	}
 	log.WithField("slot", s.cfg.Chain.HeadSlot()).Info("Synced up to")
 	s.markSynced()
 }

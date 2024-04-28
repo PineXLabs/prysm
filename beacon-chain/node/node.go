@@ -514,7 +514,8 @@ func (b *BeaconNode) clearDB(clearDB, forceClearDB bool, d *kv.Store, dbPath str
 			return nil, errors.Wrap(err, "could not clear database")
 		}
 
-		if err := b.BlobStorage.Clear(); err != nil {
+		//if err := b.BlobStorage.Clear(); err != nil {
+		if err := b.ColumnStorage.Clear(); err != nil {
 			return nil, errors.Wrap(err, "could not clear blob storage")
 		}
 
@@ -877,7 +878,8 @@ func (b *BeaconNode) registerSyncService(initialSyncComplete chan struct{}, bFil
 		regularsync.WithClockWaiter(b.clockWaiter),
 		regularsync.WithInitialSyncComplete(initialSyncComplete),
 		regularsync.WithStateNotifier(b),
-		regularsync.WithBlobStorage(b.BlobStorage),
+		//regularsync.WithBlobStorage(b.BlobStorage),  //todo: delete
+		regularsync.WithColumnStorage(b.ColumnStorage),
 		regularsync.WithVerifierWaiter(b.verifyInitWaiter),
 		regularsync.WithAvailableBlocker(bFillStore),
 	)

@@ -258,7 +258,8 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ExecutionEngineTimeoutValue: 8, // 8 seconds default based on: https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#core
 
 	// Subnet value
-	BlobsidecarSubnetCount: 6,
+	BlobsidecarSubnetCount:   6,
+	ColumnsidecarSubnetCount: 128,
 
 	MaxPerEpochActivationChurnLimit:    8,
 	MinEpochsForBlobsSidecarsRequest:   4096,
