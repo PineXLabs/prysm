@@ -2,7 +2,6 @@ package validator
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/PineXLabs/das"
@@ -108,10 +107,10 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	if cLen != len(blobs) || cLen != len(kzgProofs) {
 		return nil, errors.New("blob KZG commitments don't match number of blobs or KZG proofs")
 	}
-	log.Debugf("In buildColumnSidecars, blob count is %d", len(blobs))
 	if cLen <= 0 {
 		return nil, nil // No blobs in this block.
 	}
+	log.Debugf("In buildColumnSidecars, blob count is %d", len(blobs))
 
 	_das := das.New()
 	colSidecars, err := _das.BlobsToColumns(blobs, denebBlk.Block.Body.BlobKzgCommitments)
@@ -119,12 +118,14 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 		log.Debugf("In buildColumnSidecars, BlobsToColumns failed, error is %s\n", err.Error())
 		return nil, err
 	}
-	if len(colSidecars) > 0 {
-		for i, com := range colSidecars[0].Commitments {
-			comStr := fmt.Sprintf("0x%x", das.MarshalCommitment(&com))
-			log.Debugf("commitment[%d] is %s", i, comStr)
+	/*
+		if len(colSidecars) > 0 {
+			for i, com := range colSidecars[0].Commitments {
+				comStr := fmt.Sprintf("0x%x", das.MarshalCommitment(&com))
+				log.Debugf("commitment[%d] is %s", i, comStr)
+			}
 		}
-	}
+	*/
 
 	header, err := blk.Header()
 	if err != nil {
@@ -148,7 +149,7 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 
 	body := blk.Block().Body()
 	commitmentInclusionProofs := make([]*ethpb.KzgCommitmentInclusionProof, 0, cLen)
-	log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
+	//log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
 	for i := range denebBlk.Block.Body.BlobKzgCommitments {
 		proof, err := blocks.MerkleProofKZGCommitment(body, i) //todo: generate merkle tree once
 		//log.Debugf("proof for commitment %d is %v", i, proof)

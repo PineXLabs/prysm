@@ -129,7 +129,7 @@ func commitmentsToColumnCheck(b blocks.ROBlock, current primitives.Slot) (column
 	if b.Version() < version.Deneb {
 		return ar, nil
 	}
-	// We are only required to check within MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS
+	// We are only required to check within MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS
 	if !params.WithinColumnDAPeriod(slots.ToEpoch(b.Block().Slot()), slots.ToEpoch(current)) {
 		return ar, nil
 	}
