@@ -29,6 +29,22 @@ func (r Requirement) String() string {
 		return "RequireSidecarKzgProofVerified"
 	case RequireSidecarProposerExpected:
 		return "RequireSidecarProposerExpected"
+	case RequireColumnIndexInBounds:
+		return "RequireColumnIndexInBounds"
+	case RequireColumnSidecarParentSeen:
+		return "RequireColumnSidecarParentSeen"
+	case RequireColumnSidecarParentValid:
+		return "RequireColumnSidecarParentValid"
+	case RequireColumnSidecarParentSlotLower:
+		return "RequireColumnSidecarParentSlotLower"
+	case RequireColumnSidecarDescendsFromFinalized:
+		return "RequireColumnSidecarDescendsFromFinalized"
+	case RequireColumnSidecarInclusionProven:
+		return "RequireColumnSidecarInclusionProven"
+	case RequireColumnSidecarKzgProofVerified:
+		return "RequireColumnSidecarInclusionProven"
+	case RequireColumnSidecarProposerExpected:
+		return "RequireColumnSidecarProposerExpected"
 	default:
 		return unknownRequirementName
 	}

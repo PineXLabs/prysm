@@ -37,8 +37,8 @@ func (s batchState) String() string {
 		return "import_complete"
 	case batchEndSequence:
 		return "end_sequence"
-	case batchBlobSync:
-		return "blob_sync"
+	case batchColumnSync:
+		return "column_sync"
 	default:
 		return "unknown"
 	}
@@ -49,7 +49,7 @@ const (
 	batchInit
 	batchSequenced
 	batchErrRetryable
-	batchBlobSync
+	batchColumnSync
 	batchImportable
 	batchImportComplete
 	batchEndSequence
@@ -69,8 +69,8 @@ type batch struct {
 	state          batchState
 	busy           peer.ID
 	blockPid       peer.ID
-	blobPid        peer.ID
-	bs             *blobSync
+	columnPid      peer.ID
+	cs             *columnSync
 }
 
 func (b batch) logFields() logrus.Fields {
@@ -84,7 +84,7 @@ func (b batch) logFields() logrus.Fields {
 		"end":       b.end,
 		"busyPid":   b.busy,
 		"blockPid":  b.blockPid,
-		"blobPid":   b.blobPid,
+		"columnPid": b.columnPid,
 	}
 }
 
@@ -121,26 +121,43 @@ func (b batch) blockRequest() *eth.BeaconBlocksByRangeRequest {
 	}
 }
 
-func (b batch) blobRequest() *eth.BlobSidecarsByRangeRequest {
-	return &eth.BlobSidecarsByRangeRequest{
+//func (b batch) blobRequest() *eth.BlobSidecarsByRangeRequest {
+//	return &eth.BlobSidecarsByRangeRequest{
+//		StartSlot: b.begin,
+//		Count:     uint64(b.end - b.begin),
+//	}
+//}
+
+func (b batch) columnRequest() *eth.ColumnSidecarsByRangeRequest {
+	return &eth.ColumnSidecarsByRangeRequest{
 		StartSlot: b.begin,
 		Count:     uint64(b.end - b.begin),
 	}
 }
 
-func (b batch) withResults(results verifiedROBlocks, bs *blobSync) batch {
+func (b batch) withResults(results verifiedROBlocks, cs *columnSync) batch {
 	b.results = results
-	b.bs = bs
-	if bs.blobsNeeded() > 0 {
-		return b.withState(batchBlobSync)
+	b.cs = cs
+	if cs.columnsNeeded() > 0 {
+		return b.withState(batchColumnSync)
 	}
 	return b.withState(batchImportable)
 }
 
-func (b batch) postBlobSync() batch {
-	if b.blobsNeeded() > 0 {
-		log.WithFields(b.logFields()).WithField("blobsMissing", b.blobsNeeded()).Error("Batch still missing blobs after downloading from peer")
-		b.bs = nil
+//func (b batch) postBlobSync() batch {
+//	if b.blobsNeeded() > 0 {
+//		log.WithFields(b.logFields()).WithField("blobsMissing", b.blobsNeeded()).Error("Batch still missing blobs after downloading from peer")
+//		b.bs = nil
+//		b.results = []blocks.ROBlock{}
+//		return b.withState(batchErrRetryable)
+//	}
+//	return b.withState(batchImportable)
+//}
+
+func (b batch) postColumnSync() batch {
+	if b.columnsNeeded() > 0 {
+		log.WithFields(b.logFields()).WithField("blobsMissing", b.columnsNeeded()).Error("Batch still missing columns after downloading from peer")
+		b.cs = nil
 		b.results = []blocks.ROBlock{}
 		return b.withState(batchErrRetryable)
 	}
@@ -178,16 +195,24 @@ func (b batch) withRetryableError(err error) batch {
 	return b.withState(batchErrRetryable)
 }
 
-func (b batch) blobsNeeded() int {
-	return b.bs.blobsNeeded()
+//func (b batch) blobsNeeded() int {
+//	return b.bs.blobsNeeded()
+//}
+
+func (b batch) columnsNeeded() int {
+	return b.cs.columnsNeeded()
 }
 
-func (b batch) blobResponseValidator() sync.BlobResponseValidation {
-	return b.bs.validateNext
+//func (b batch) blobResponseValidator() sync.BlobResponseValidation {
+//	return b.bs.validateNext
+//}
+
+func (b batch) columnResponseValidator() sync.ColumnResponseValidation {
+	return b.cs.validateNext
 }
 
-func (b batch) availabilityStore() das.AvailabilityStore {
-	return b.bs.store
+func (b batch) availabilityStore() das.ColumnAvailabilityStore {
+	return b.cs.store
 }
 
 func sortBatchDesc(bb []batch) {

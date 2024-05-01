@@ -757,10 +757,6 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	}
 	log.Debugf("len(missing) is %d", len(missing))
 
-	// The gossip handler for blobs writes the index of each verified blob referencing the given
-	// root to the channel returned by blobNotifiers.forRoot.
-	//nc := s.blobNotifiers.forRoot(root)
-
 	// The gossip handler for columns writes the index of each verified column referencing the given
 	// root to the channel returned by columnNotifiers.forRoot.
 	nc := s.columnNotifiers.forRoot(root)
@@ -781,7 +777,7 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	for {
 		select {
 		case idx := <-nc:
-			log.Debugf("for select case idx: len(missing) is %d", len(missing))
+			//log.Debugf("for select case idx: len(missing) is %d", len(missing))
 			// Delete each index seen in the notification channel.
 			delete(missing, idx)
 			// Read from the channel until there are no more missing sidecars.
@@ -792,7 +788,7 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 			s.columnNotifiers.delete(root)
 			return nil
 		case <-ctx.Done():
-			log.Debugf("for select case ctx.Done: len(missing) is %d", len(missing))
+			//log.Debugf("for select case ctx.Done: len(missing) is %d", len(missing))
 			return errors.Wrapf(ctx.Err(), "context deadline waiting for column sidecars slot: %d, BlockRoot: %#x", block.Slot(), root)
 		}
 	}

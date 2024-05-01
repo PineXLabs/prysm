@@ -51,6 +51,38 @@ func (v verifiedROBlocks) blobIdents(retentionStart primitives.Slot) ([]blobSumm
 	return bs, nil
 }
 
+func (v verifiedROBlocks) columnIdents(retentionStart primitives.Slot) ([]columnSummary, error) {
+	// early return if the newest block is outside the retention window
+	if len(v) > 0 && v[len(v)-1].Block().Slot() < retentionStart {
+		return nil, nil
+	}
+	bs := make([]columnSummary, 0)
+	for i := range v {
+		if v[i].Block().Slot() < retentionStart {
+			continue
+		}
+		if v[i].Block().Version() < version.Deneb {
+			continue
+		}
+		c, err := v[i].Block().Body().BlobKzgCommitments()
+		if err != nil {
+			return nil, errors.Wrapf(err, "unexpected error checking commitments for block root %#x", v[i].Root())
+		}
+		if len(c) == 0 {
+			continue
+		}
+		for ci := range c {
+			bs = append(bs, columnSummary{
+				blockRoot:   v[i].Root(),
+				signature:   v[i].Signature(),
+				index:       uint64(ci),
+				commitments: c,
+			})
+		}
+	}
+	return bs, nil
+}
+
 type verifier struct {
 	keys   [][fieldparams.BLSPubkeyLength]byte
 	maxVal primitives.ValidatorIndex
