@@ -174,17 +174,17 @@ var (
 		Usage: "The factor by which blob batch limit may increase on burst.",
 		Value: 2,
 	}
-	// ColumnBatchLimit specifies the requested blob batch size.
+	// ColumnBatchLimit specifies the requested column batch size.
 	ColumnBatchLimit = &cli.IntFlag{
 		Name:  "column-batch-limit",
 		Usage: "The amount of columns the local peer is bounded to request and respond to in a batch.",
-		Value: 64,
+		Value: 256, //todo: confirm again
 	}
 	// ColumnBatchLimitBurstFactor specifies the factor by which column batch size may increase.
 	ColumnBatchLimitBurstFactor = &cli.IntFlag{
 		Name:  "column-batch-limit-burst-factor",
 		Usage: "The factor by which column batch limit may increase on burst.",
-		Value: 2,
+		Value: 64, //todo: confirm again
 	}
 	// EnableDebugRPCEndpoints as /v1/beacon/state.
 	EnableDebugRPCEndpoints = &cli.BoolFlag{

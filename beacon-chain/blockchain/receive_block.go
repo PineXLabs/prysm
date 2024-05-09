@@ -299,7 +299,7 @@ func (s *Service) ReceiveBlock2(ctx context.Context, block interfaces.ReadOnlySi
 	}
 	daStartTime := time.Now()
 	if avs != nil {
-		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), rob); err != nil { //todo: support blob -> column
+		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), rob); err != nil {
 			errWrap := errors.Wrap(err, "could not validate column data availability (AvailabilityStore.IsDataAvailable)")
 			log.Errorf(errWrap.Error())
 			return errWrap

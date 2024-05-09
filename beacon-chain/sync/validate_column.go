@@ -24,7 +24,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// todo: to complete
 func (s *Service) validateColumn(ctx context.Context, pid peer.ID, msg *pubsub.Message) (pubsub.ValidationResult, error) {
 	receivedTime := prysmTime.Now()
 

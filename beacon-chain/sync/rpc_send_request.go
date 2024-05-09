@@ -62,6 +62,7 @@ func SendBeaconBlocksByRangeRequest(
 	}
 	stream, err := p2pProvider.Send(ctx, req, topic, pid)
 	if err != nil {
+		log.Errorf("SendBeaconBlocksByRangeRequest, p2pProvider.Send error: %s", err.Error())
 		return nil, err
 	}
 	defer closeStream(stream, log)
@@ -83,16 +84,19 @@ func SendBeaconBlocksByRangeRequest(
 			break
 		}
 		if err != nil {
+			log.Errorf("SendBeaconBlocksByRangeRequest, ReadChunkedBlock error: %s", err.Error())
 			return nil, err
 		}
 		// The response MUST contain no more than `count` blocks, and no more than
 		// MAX_REQUEST_BLOCKS blocks.
 		currentEpoch := slots.ToEpoch(tor.CurrentSlot())
 		if i >= req.Count || i >= params.MaxRequestBlock(currentEpoch) {
+			log.Error("SendBeaconBlocksByRangeRequest, ErrInvalidFetchedData 1")
 			return nil, ErrInvalidFetchedData
 		}
 		// Returned blocks MUST be in the slot range [start_slot, start_slot + count * step).
 		if blk.Block().Slot() < req.StartSlot || blk.Block().Slot() >= req.StartSlot.Add(req.Count*req.Step) {
+			log.Error("SendBeaconBlocksByRangeRequest, ErrInvalidFetchedData 2")
 			return nil, ErrInvalidFetchedData
 		}
 		// Returned blocks, where they exist, MUST be sent in a consecutive order.
@@ -500,6 +504,7 @@ func readChunkEncodedColumns(stream network.Stream, encoding encoder.NetworkEnco
 			if errors.Is(err, io.EOF) {
 				break
 			}
+			log.Errorf("in readChunkEncodedColumns, after readChunkedColumnSidecar, err is %s", err.Error())
 			return nil, err
 		}
 		if i == max {
@@ -567,13 +572,16 @@ func readChunkedColumnSidecar(stream network.Stream, encoding encoder.NetworkEnc
 	)
 	code, msg, err := ReadStatusCode(stream, encoding)
 	if err != nil {
+		//log.Errorf("in readChunkedColumnSidecar, after ReadStatusCode, err is %s", err.Error())
 		return b, err
 	}
 	if code != 0 {
+		//log.Errorf("in readChunkedColumnSidecar, after ReadStatusCode, code is %d", code)
 		return b, errors.Wrap(errColumnChunkedReadFailure, msg)
 	}
 	ctxb, err := readContextFromStream(stream)
 	if err != nil {
+		//log.Errorf("in readChunkedColumnSidecar, after readContextFromStream, err is %s", err.Error())
 		return b, errors.Wrap(err, "error reading chunk context bytes from stream")
 	}
 

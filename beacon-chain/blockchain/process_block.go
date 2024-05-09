@@ -403,6 +403,7 @@ func (s *Service) onBlockBatch2(ctx context.Context, blks []consensusblocks.ROBl
 				return err
 			}
 		}
+		//log.Debug("in onBlockBatch2, before avs.IsDataAvailable")
 		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
 			return errors.Wrapf(err, "could not validate column data availability availability at slot %d", b.Block().Slot())
 		}

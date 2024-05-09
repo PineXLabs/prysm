@@ -41,6 +41,7 @@ func (s *Service) streamColumnBatch(ctx context.Context, batch blockBatch, wQuot
 			// We won't check for file not found since the .Indices method should normally prevent that from happening.
 			sc, err := s.cfg.columnStorage.Get(b.Root(), i)
 			if err != nil {
+				log.WithError(err).Error("in streamColumnBatch, after s.cfg.columnStorage.Get")
 				s.writeErrorResponseToStream(responseCodeServerError, p2ptypes.ErrGeneric.Error(), stream)
 				return wQuota, errors.Wrapf(err, "could not retrieve column sidecar: index %d, block root %#x", i, root)
 			}
@@ -92,7 +93,7 @@ func (s *Service) columnSidecarsByRangeRPCHandler(ctx context.Context, msg inter
 	defer ticker.Stop()
 	batcher, err := newBlockRangeBatcher(rp, s.cfg.beaconDB, s.rateLimiter, s.cfg.chain.IsCanonical, ticker)
 	if err != nil {
-		log.WithError(err).Info("error in ColumnSidecarsByRange batch")
+		log.WithError(err).Info("in columnSidecarsByRangeRPCHandler, newBlockRangeBatcher")
 		s.writeErrorResponseToStream(responseCodeServerError, p2ptypes.ErrGeneric.Error(), stream)
 		tracing.AnnotateError(span, err)
 		return err
@@ -105,6 +106,7 @@ func (s *Service) columnSidecarsByRangeRPCHandler(ctx context.Context, msg inter
 		wQuota, err = s.streamColumnBatch(ctx, batch, wQuota, stream)
 		rpcColumnsByRangeResponseLatency.Observe(float64(time.Since(batchStart).Milliseconds()))
 		if err != nil {
+			log.WithError(err).Info("in columnSidecarsByRangeRPCHandler, streamColumnBatch")
 			return err
 		}
 		// once we have written MAX_REQUEST_COLUMN_SIDECARS, we're done serving the request
@@ -140,8 +142,8 @@ func ColumnRPCMinValidSlot(current primitives.Slot) (primitives.Slot, error) {
 	return slots.EpochStart(minStart)
 }
 
-func columnBatchLimit() uint64 {
-	return uint64(flags.Get().BlockBatchLimit / fieldparams.MaxColumnsPerBlock)
+func columnBatchLimit() uint64 { //todo: to confirm again
+	return uint64(flags.Get().BlockBatchLimit / fieldparams.MaxBlobsPerBlock * fieldparams.MaxColumnsPerBlock / fieldparams.MaxBlobsPerBlock)
 }
 
 func validateColumnsByRange(r *pb.ColumnSidecarsByRangeRequest, current primitives.Slot) (rangeParams, error) {

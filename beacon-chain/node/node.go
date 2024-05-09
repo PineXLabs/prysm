@@ -181,14 +181,6 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, opts ...Option) (*Beaco
 	}
 
 	// Allow tests to set it as an opt.
-	//if beacon.BlobStorage == nil {
-	//	beacon.BlobStorageOptions = append(beacon.BlobStorageOptions, filesystem.WithSaveFsync(features.Get().BlobSaveFsync))
-	//	blobs, err := filesystem.NewBlobStorage(beacon.BlobStorageOptions...)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	beacon.BlobStorage = blobs
-	//}
 	if beacon.ColumnStorage == nil {
 		beacon.ColumnStorageOptions = append(beacon.ColumnStorageOptions, filesystem.WithColumnSaveFsync(features.Get().ColumnSaveFsync))
 		columns, err := filesystem.NewColumnStorage(beacon.ColumnStorageOptions...)
@@ -878,7 +870,6 @@ func (b *BeaconNode) registerSyncService(initialSyncComplete chan struct{}, bFil
 		regularsync.WithClockWaiter(b.clockWaiter),
 		regularsync.WithInitialSyncComplete(initialSyncComplete),
 		regularsync.WithStateNotifier(b),
-		//regularsync.WithBlobStorage(b.BlobStorage),  //todo: delete
 		regularsync.WithColumnStorage(b.ColumnStorage),
 		regularsync.WithVerifierWaiter(b.verifyInitWaiter),
 		regularsync.WithAvailableBlocker(bFillStore),
@@ -904,8 +895,7 @@ func (b *BeaconNode) registerInitialSyncService(complete chan struct{}) error {
 		BlockNotifier:       b,
 		ClockWaiter:         b.clockWaiter,
 		InitialSyncComplete: complete,
-		//BlobStorage:         b.BlobStorage, //todo: delete
-		ColumnStorage: b.ColumnStorage,
+		ColumnStorage:       b.ColumnStorage,
 	}, opts...)
 	return b.services.RegisterService(is)
 }
