@@ -132,9 +132,12 @@ func newBlocksFetcher(ctx context.Context, cfg *blocksFetcherConfig) *blocksFetc
 	blocksPerPeriod := blockBatchLimit
 	allowedBlocksBurst := flags.Get().BlockBatchLimitBurstFactor * blockBatchLimit
 	// Allow fetcher to go almost to the full burst capacity (less a single batch).
-	rateLimiter := leakybucket.NewCollector(
+	rateLimiter := leakybucket.NewCollector( //todo: check rateLimiter for columns
 		float64(blocksPerPeriod), int64(allowedBlocksBurst-blocksPerPeriod),
 		blockLimiterPeriod, false /* deleteEmptyBuckets */)
+
+	//log.Debugf("newBlocksFetcher rateLimiter, capacity is %d, period is %d", allowedBlocksBurst-blocksPerPeriod, blockLimiterPeriod)
+	//log.Debugf("newBlocksFetcher blocksPerPeriod is %d", blocksPerPeriod)
 
 	capacityWeight := cfg.peerFilterCapacityWeight
 	if capacityWeight >= 1 {
@@ -317,6 +320,7 @@ func (f *blocksFetcher) handleRequest(ctx context.Context, start primitives.Slot
 	if response.err == nil {
 		bwc, err := f.fetchColumnsFromPeer(ctx, response.bwc, response.pid, peers)
 		if err != nil {
+			log.Errorf("fetchColumnsFromPeer failed, error is %s", err.Error())
 			response.err = err
 		}
 		response.bwc = bwc
@@ -352,7 +356,6 @@ func (f *blocksFetcher) fetchBlocksFromPeer(
 			continue
 		}
 		f.p2p.Peers().Scorers().BlockProviderScorer().Touch(p)
-		//robs, err := sortedBlockWithVerifiedBlobSlice(blocks)
 		rocs, err := sortedBlockWithVerifiedColumnSlice(blocks)
 		if err != nil {
 			log.WithField("peer", p).WithError(err).Debug("invalid BeaconBlocksByRange response")
@@ -548,6 +551,20 @@ func verifyAndPopulateColumns(bwc []blocks2.BlockWithROColumns, columns []blocks
 		if block.Slot() < columnWindowStart {
 			continue
 		}
+		commitments, err := block.Body().BlobKzgCommitments()
+		if err != nil {
+			if errors.Is(err, consensus_types.ErrUnsupportedField) {
+				log.
+					WithField("blockSlot", block.Slot()).
+					WithField("retentionStart", columnWindowStart).
+					Warn("block with slot within column retention period has version which does not support commitments")
+				continue
+			}
+			return nil, err
+		}
+		if len(commitments) == 0 {
+			continue
+		}
 		bb.Columns = make([]blocks.ROColumn, fieldparams.MaxColumnsPerBlock)
 		existed := make(map[uint64]bool, fieldparams.MaxColumnsPerBlock)
 		for ci := 0; ci < fieldparams.MaxColumnsPerBlock; ci++ {
@@ -558,6 +575,7 @@ func verifyAndPopulateColumns(bwc []blocks2.BlockWithROColumns, columns []blocks
 			}
 			cl := columns[columni]
 			if err := verify.ColumnAlignsWithBlock(cl, bb.Block); err != nil {
+				log.Errorf("verify.ColumnAlignsWithBlock err is %s", err.Error())
 				return nil, err
 			}
 			if existed[cl.Index] {
@@ -644,6 +662,15 @@ func (f *blocksFetcher) fetchColumnsFromPeer(ctx context.Context, bwc []blocks2.
 	if req == nil {
 		return bwc, nil
 	}
+
+	//log.Debugf("in fetchColumnsFromPeer, req.StartSlot %d, req.Count %d", req.StartSlot, req.Count)
+
+	//if len(bwc) > 0 {
+	//	for i, c := range bwc {
+	//		log.Debugf("in fetchColumnsFromPeer, bwc[%d].Block.Block().Slot() %d", i, c.Block.Block().Slot())
+	//	}
+	//}
+
 	peers = f.filterPeers(ctx, peers, peersPercentagePerRequest)
 	// We dial the initial peer first to ensure that we get the desired set of blobs.
 	wantedPeers := append([]peer.ID{pid}, peers...)
@@ -689,9 +716,14 @@ func (f *blocksFetcher) requestBlocks(
 		"capacity": f.rateLimiter.Remaining(pid.String()),
 		"score":    f.p2p.Peers().Scorers().BlockProviderScorer().FormatScorePretty(pid),
 	}).Debug("Requesting blocks")
-	if f.rateLimiter.Remaining(pid.String()) < int64(req.Count) {
+	if f.rateLimiter.Remaining(pid.String()) < int64(req.Count) { //todo: adapt for column
+		log.WithFields(logrus.Fields{
+			"Remaining": f.rateLimiter.Remaining(pid.String()),
+			"req.Count": req.Count,
+		}).Debug("Bandwidth not enough")
 		if err := f.waitForBandwidth(pid, req.Count); err != nil {
 			l.Unlock()
+			log.Errorf("waitForBandwidth, error is %s", err.Error())
 			return nil, err
 		}
 	}
@@ -796,12 +828,14 @@ func (f *blocksFetcher) waitForBandwidth(pid peer.ID, count uint64) error {
 		return err
 	}
 	toWait := timeToWait(int64(intCount), rem, f.rateLimiter.Capacity(), f.rateLimiter.TillEmpty(pid.String()))
+	log.Debugf("waitForBandwidth, wait %f seconds", toWait.Seconds())
 	timer := time.NewTimer(toWait)
 	defer timer.Stop()
 	select {
 	case <-f.ctx.Done():
 		return errFetcherCtxIsDone
 	case <-timer.C:
+		log.Debugf("waitForBandwidth, %f seconds later, Peer has gathered enough capacity to be polled again", toWait.Seconds())
 		// Peer has gathered enough capacity to be polled again.
 	}
 	return nil

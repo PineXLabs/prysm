@@ -53,7 +53,6 @@ type Config struct {
 	BlockNotifier       blockfeed.Notifier
 	ClockWaiter         startup.ClockWaiter
 	InitialSyncComplete chan struct{}
-	BlobStorage         *filesystem.BlobStorage //todo: delete
 	ColumnStorage       *filesystem.ColumnStorage
 }
 
@@ -68,7 +67,6 @@ type Service struct {
 	genesisChan       chan time.Time
 	clock             *startup.Clock
 	verifierWaiter    *verification.InitializerWaiter
-	newBlobVerifier   verification.NewBlobVerifier //todo: delete
 	newColumnVerifier verification.NewColumnVerifier
 	ctxMap            sync.ContextByteVersions
 }
@@ -188,15 +186,11 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Error waiting for minimum number of peers")
 		return
 	}
-	//if err := s.fetchOriginBlobs(peers); err != nil {
-	//	log.WithError(err).Error("Failed to fetch missing blobs for checkpoint origin")
-	//	return
-	//}
 	if err := s.fetchOriginColumns(peers); err != nil {
 		log.WithError(err).Error("Failed to fetch missing columns for checkpoint origin")
 		return
 	}
-	if err := s.roundRobinSync(gt); err != nil { //todo: adapt to column sync
+	if err := s.roundRobinSync(gt); err != nil {
 		if errors.Is(s.ctx.Err(), context.Canceled) {
 			return
 		}
@@ -341,6 +335,7 @@ func missingColumnRequest(blk blocks.ROBlock, store *filesystem.ColumnStorage) (
 	return req, nil
 }
 
+/*
 func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
 	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
@@ -390,6 +385,7 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 	}
 	return fmt.Errorf("no connected peer able to provide blobs for checkpoint sync block %#x", r)
 }
+*/
 
 func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)

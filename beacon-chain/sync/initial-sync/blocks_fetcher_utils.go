@@ -23,7 +23,7 @@ import (
 // either in DB or initial sync cache.
 type forkData struct {
 	peer peer.ID
-	bwb  []blocks.BlockWithROBlobs
+	bwc  []blocks.BlockWithROColumns
 }
 
 // nonSkippedSlotAfter checks slots after the given one in an attempt to find a non-empty future slot.
@@ -44,6 +44,7 @@ func (f *blocksFetcher) nonSkippedSlotAfter(ctx context.Context, slot primitives
 
 	// Exit early if no peers with epoch higher than our known head are found.
 	if targetEpoch <= headEpoch {
+		log.Errorf("targetEpoch <= headEpoch, %s", errSlotIsTooHigh.Error())
 		return 0, errSlotIsTooHigh
 	}
 
@@ -274,19 +275,19 @@ func (f *blocksFetcher) findForkWithPeer(ctx context.Context, pid peer.ID, slot 
 			"slot": block.Block().Slot(),
 			"root": fmt.Sprintf("%#x", parentRoot),
 		}).Debug("Block with unknown parent root has been found")
-		altBlocks, err := sortedBlockWithVerifiedBlobSlice(blocks[i-1:])
+		altBlocks, err := sortedBlockWithVerifiedColumnSlice(blocks[i-1:])
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid blocks received in findForkWithPeer")
 		}
-		// We need to fetch the blobs for the given alt-chain if any exist, so that we can try to verify and import
+		// We need to fetch the columns for the given alt-chain if any exist, so that we can try to verify and import
 		// the blocks.
-		bwb, err := f.fetchBlobsFromPeer(ctx, altBlocks, pid, []peer.ID{pid})
+		bwc, err := f.fetchColumnsFromPeer(ctx, altBlocks, pid, []peer.ID{pid})
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to retrieve blobs for blocks found in findForkWithPeer")
 		}
-		// The caller will use the BlocksWith VerifiedBlobs in bwb as the starting point for
+		// The caller will use the BlocksWith VerifiedColumns in bwc as the starting point for
 		// round-robin syncing the alternate chain.
-		return &forkData{peer: pid, bwb: bwb}, nil
+		return &forkData{peer: pid, bwc: bwc}, nil
 	}
 	return nil, errNoAlternateBlocks
 }
@@ -298,17 +299,17 @@ func (f *blocksFetcher) findAncestor(ctx context.Context, pid peer.ID, b interfa
 		parentRoot := outBlocks[len(outBlocks)-1].Block().ParentRoot()
 		if f.chain.HasBlock(ctx, parentRoot) {
 			// Common ancestor found, forward blocks back to processor.
-			bwb, err := sortedBlockWithVerifiedBlobSlice(outBlocks)
+			bwc, err := sortedBlockWithVerifiedColumnSlice(outBlocks)
 			if err != nil {
 				return nil, errors.Wrap(err, "received invalid blocks in findAncestor")
 			}
-			bwb, err = f.fetchBlobsFromPeer(ctx, bwb, pid, []peer.ID{pid})
+			bwc, err = f.fetchColumnsFromPeer(ctx, bwc, pid, []peer.ID{pid})
 			if err != nil {
-				return nil, errors.Wrap(err, "unable to retrieve blobs for blocks found in findAncestor")
+				return nil, errors.Wrap(err, "unable to retrieve columns for blocks found in findAncestor")
 			}
 			return &forkData{
 				peer: pid,
-				bwb:  bwb,
+				bwc:  bwc,
 			}, nil
 		}
 		// Request block's parent.

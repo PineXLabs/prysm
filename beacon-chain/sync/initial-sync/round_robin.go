@@ -79,6 +79,7 @@ func (s *Service) syncToFinalizedEpoch(ctx context.Context, genesis time.Time) e
 	}
 	if s.cfg.Chain.HeadSlot() >= highestFinalizedSlot {
 		// No need to sync, already synced to the finalized slot.
+		log.Debugf("s.cfg.Chain.HeadSlot() [%d] >= highestFinalizedSlot [%d]", s.cfg.Chain.HeadSlot(), highestFinalizedSlot)
 		log.Debug("Already synced to finalized epoch")
 		return nil
 	}
@@ -102,9 +103,9 @@ func (s *Service) syncToFinalizedEpoch(ctx context.Context, genesis time.Time) e
 	}
 
 	for data := range queue.fetchedColumnData {
-		// If blobs are available. Verify blobs and blocks are consistence.
-		// We can't import a block if there's no associated blob within DA bound.
-		// The blob has to pass aggregated proof check.
+		// If columns are available. Verify columns and blocks are consistence.
+		// We can't import a block if there's no associated column within DA bound.
+		// The column has to pass aggregated proof check.
 		s.processFetchedColumnData(ctx, genesis, s.cfg.Chain.HeadSlot(), data)
 	}
 
@@ -122,7 +123,6 @@ func (s *Service) syncToFinalizedEpoch(ctx context.Context, genesis time.Time) e
 // syncToNonFinalizedEpoch sync from head to best known non-finalized epoch supported by majority
 // of peers (no less than MinimumSyncPeers*2 peers).
 func (s *Service) syncToNonFinalizedEpoch(ctx context.Context, genesis time.Time) error {
-	log.Debug("enter syncToNonFinalizedEpoch")
 	vr := s.clock.GenesisValidatorsRoot()
 	ctxMap, err := sync.ContextByteVersionsForValRoot(vr)
 	if err != nil {
@@ -151,12 +151,11 @@ func (s *Service) syncToNonFinalizedEpoch(ctx context.Context, genesis time.Time
 		log.WithError(err).Debug("Error stopping queue")
 	}
 
-	log.Debug("out syncToNonFinalizedEpoch")
-
 	return nil
 }
 
 // processFetchedData processes data received from queue.
+/*
 func (s *Service) processFetchedData(
 	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedData) {
 	defer s.updatePeerScorerStats(data.pid, startSlot)
@@ -166,6 +165,7 @@ func (s *Service) processFetchedData(
 		log.WithError(err).Warn("Skip processing batched blocks")
 	}
 }
+*/
 
 // processFetchedColumnData processes data received from queue.
 func (s *Service) processFetchedColumnData(
@@ -179,6 +179,7 @@ func (s *Service) processFetchedColumnData(
 }
 
 // processFetchedDataRegSync processes data received from queue.
+/*
 func (s *Service) processFetchedDataRegSync(
 	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedData) {
 	defer s.updatePeerScorerStats(data.pid, startSlot)
@@ -215,6 +216,7 @@ func (s *Service) processFetchedDataRegSync(
 		}
 	}
 }
+*/
 
 // processFetchedColumnDataRegSync processes data received from queue.
 func (s *Service) processFetchedColumnDataRegSync(
@@ -418,6 +420,7 @@ func validUnprocessed2(ctx context.Context, bwc []blocks.BlockWithROColumns, hea
 	return bwc[nonProcessedIdx:], nil
 }
 
+/*
 func (s *Service) processBatchedBlocks(ctx context.Context, genesis time.Time,
 	bwb []blocks.BlockWithROBlobs, bFunc batchBlockReceiverFn) error {
 	if len(bwb) == 0 {
@@ -453,6 +456,7 @@ func (s *Service) processBatchedBlocks(ctx context.Context, genesis time.Time,
 
 	return bFunc(ctx, blocks.BlockWithROBlobsSlice(bwb).ROBlocks(), avs)
 }
+*/
 
 func (s *Service) processBatchedBlocksWithColumns(ctx context.Context, genesis time.Time,
 	bwc []blocks.BlockWithROColumns, bFunc batchBlockReceiverFn2) error {
@@ -475,7 +479,7 @@ func (s *Service) processBatchedBlocksWithColumns(ctx context.Context, genesis t
 			errParentDoesNotExist, first.Block().ParentRoot(), first.Block().Slot())
 	}
 
-	bc := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncSidecarRequirements)
+	bc := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
 	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bc)
 	s.logBatchSyncStatus(genesis, first, len(bwc))
 	for _, bb := range bwc {

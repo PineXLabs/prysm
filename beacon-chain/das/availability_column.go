@@ -67,6 +67,7 @@ func (s *ColumnLazilyPersistentStore) Persist(current primitives.Slot, sc ...blo
 	key := keyFromColumnSidecar(sc[0])
 	entry := s.cache.ensure(key)
 	for i := range sc {
+		//log.Debugf("Persisting a column to cache, key.slot %d, key.root %#x, i is %d", key.slot, key.root, i)
 		if err := entry.stash(&sc[i]); err != nil {
 			return err
 		}

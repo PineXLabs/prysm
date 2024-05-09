@@ -137,6 +137,8 @@ var messageMapping = map[string]bool{
 	MetadataMessageName:            true,
 	BlobSidecarsByRangeName:        true,
 	BlobSidecarsByRootName:         true,
+	ColumnSidecarsByRangeName:      true,
+	ColumnSidecarsByRootName:       true,
 }
 
 // Maps all the RPC messages which are to updated in altair.

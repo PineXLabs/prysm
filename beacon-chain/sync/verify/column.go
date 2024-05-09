@@ -27,7 +27,7 @@ func ColumnAlignsWithBlock(column blocks.ROColumn, block blocks.ROBlock) error {
 	}
 
 	if column.BlockRoot() != block.Root() {
-		return ErrColumnBlockMisaligned
+		return errors.Wrapf(ErrColumnBlockMisaligned, "column.BlockRoot() %#x != block.Root() %#x", column.BlockRoot(), block.Root())
 	}
 
 	// Verify commitment byte values match

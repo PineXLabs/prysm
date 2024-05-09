@@ -213,6 +213,7 @@ func (q *blocksQueue) loop() {
 
 		select {
 		case <-ticker.C:
+			//log.Debugf("func (q *blocksQueue) loop(), <-ticker.C, len(q.smm.keys) is %d, q.smm.keys is %v", len(q.smm.keys), q.smm.keys)
 			for _, key := range q.smm.keys {
 				fsm := q.smm.machines[key]
 				if err := fsm.trigger(eventTick, nil); err != nil {
@@ -238,6 +239,7 @@ func (q *blocksQueue) loop() {
 				}
 				// Do garbage collection, and advance sliding window forward.
 				if q.chain.HeadSlot() >= fsm.start.Add(blocksPerRequest-1) {
+					//log.Debugf("advance sliding window forward, q.chain.HeadSlot() %d >=  fsm.start.Add(blocksPerRequest-1) %d", q.chain.HeadSlot(), fsm.start.Add(blocksPerRequest-1))
 					highestStartSlot, err := q.smm.highestStartSlot()
 					if err != nil {
 						log.WithError(err).Debug("Cannot obtain highest epoch state number")
@@ -252,6 +254,7 @@ func (q *blocksQueue) loop() {
 				}
 			}
 		case response, ok := <-q.blocksFetcher.requestResponses():
+			//log.Debug("func (q *blocksQueue) loop(), <-q.blocksFetcher.requestResponses()")
 			if !ok {
 				log.Debug("Fetcher closed output channel")
 				q.cancel()
@@ -268,6 +271,7 @@ func (q *blocksQueue) loop() {
 					fsm.setState(stateNew)
 					continue
 				}
+				//log.Debug("fsm.trigger(eventDataReceived, response) done")
 			}
 		case <-q.ctx.Done():
 			log.Debug("Context closed, exiting goroutine (blocks queue)")
@@ -305,6 +309,10 @@ func (q *blocksQueue) onScheduleEvent(ctx context.Context) eventHandlerFn {
 		}
 		if m.start > q.highestExpectedSlot {
 			m.setState(stateSkipped)
+			log.WithFields(logrus.Fields{
+				"m.start":               m.start,
+				"q.highestExpectedSlot": q.highestExpectedSlot,
+			}).Error("onScheduleEvent, m.start > q.highestExpectedSlot")
 			return m.state, errSlotIsTooHigh
 		}
 		blocksPerRequest := q.blocksFetcher.blocksPerPeriod
@@ -360,7 +368,7 @@ func (q *blocksQueue) onReadyToSendEvent(ctx context.Context) eventHandlerFn {
 			return m.state, errInvalidInitialState
 		}
 
-		if len(m.bwb) == 0 {
+		if len(m.bwc) == 0 {
 			return stateSkipped, nil
 		}
 

@@ -123,11 +123,13 @@ func (batch *ColumnBatchVerifier) VerifiedROColumns(ctx context.Context, blk blo
 	// So at this stage we just need to make sure the value being signed and signature bytes match the block.
 	for i := range scs {
 		if blk.Signature() != bytesutil.ToBytes96(scs[i].SignedBlockHeader.Signature) {
+			//fmt.Printf("in VerifiedROColumns, i = %d, error is %s, blk.Signature() = %#v, scs[i].SignedBlockHeader.Signature = %#v\n", i, ErrBatchSignatureMismatch.Error(), blk.Signature(), bytesutil.ToBytes96(scs[i].SignedBlockHeader.Signature))
 			return nil, ErrBatchSignatureMismatch
 		}
 		// Extra defensive check to make sure the roots match. This should be unnecessary in practice since the root from
 		// the block should be used as the lookup key into the cache of sidecars.
 		if blk.Root() != scs[i].BlockRoot() {
+			//fmt.Printf("in VerifiedROColumns, i = %d, error is %s, blk.Root() = %#v, scs[i].BlockRoot() = %#v\n", i, ErrBatchBlockRootMismatch.Error(), blk.Root(), scs[i].BlockRoot())
 			return nil, ErrBatchBlockRootMismatch
 		}
 	}

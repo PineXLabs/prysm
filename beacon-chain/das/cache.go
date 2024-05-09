@@ -167,12 +167,12 @@ func (e *columnCacheEntry) filter(root [32]byte, kc columnSafeCommitmentArray) (
 	}
 	commitmentsHash := hash.Hash(commitConcat)
 
-	scs := make([]blocks.ROColumn, kc.count())
+	scs := make([]blocks.ROColumn, fieldparams.MaxColumnsPerBlock)
 	for i := uint64(0); i < fieldparams.MaxColumnsPerBlock; i++ {
 		if e.scs[i] == nil {
 			return nil, errors.Wrapf(errMissingColumnSidecar, "root=%#x, index=%#x", root, i)
 		}
-		if !bytes.Equal(commitmentsHash[:], e.scs[i].CommitmentsHash) {
+		if !bytes.Equal(commitmentsHash[:], e.scs[i].CommitmentsHash) { //todo: compare commitments one by one directly?
 			return nil, errors.Wrapf(errCommitmentsHashMismatch, "root=%#x, index=%#x, commitmentsHash=%#x, the calculated hash of block commitments=%#x", root, i, e.scs[i].CommitmentsHash, commitmentsHash)
 		}
 		scs[i] = *e.scs[i]
