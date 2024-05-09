@@ -87,7 +87,7 @@ func (vs *Server) deposits(
 	}
 
 	_, genesisEth1Block := vs.Eth1InfoFetcher.GenesisExecutionChainInfo()
-	if genesisEth1Block.Cmp(canonicalEth1DataHeight) == 0 {
+	if canonicalEth1DataHeight.Cmp(big.NewInt(0)) > 0 && genesisEth1Block.Cmp(canonicalEth1DataHeight) == 0 {
 		return []*ethpb.Deposit{}, nil
 	}
 
