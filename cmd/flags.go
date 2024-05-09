@@ -40,6 +40,11 @@ var (
 		Usage: "Data directory for the databases.",
 		Value: DefaultDataDir(),
 	}
+	// InitialValidatorDirFlag specifies a path on disk where initial validators info locate
+	InitialValidatorsDirFlag = &cli.StringFlag{
+		Name:  "initial-validators",
+		Usage: "Directory for initial validators",
+	}
 	// EnableBackupWebhookFlag for users to trigger db backups via an HTTP webhook.
 	EnableBackupWebhookFlag = &cli.BoolFlag{
 		Name: "enable-db-backup-webhook",

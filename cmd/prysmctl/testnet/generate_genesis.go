@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ghodss/yaml"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
@@ -28,6 +26,7 @@ import (
 )
 
 var (
+	depositDataRoots          [][]byte // for structuring a deposit trie of real valid data
 	generateGenesisStateFlags = struct {
 		DepositJsonFile    string
 		ChainConfigFile    string
@@ -226,6 +225,7 @@ func setGlobalParams() error {
 func generateGenesis(ctx context.Context) (state.BeaconState, error) {
 	f := &generateGenesisStateFlags
 	if f.GenesisTime == 0 {
+		//f.GenesisTime = uint64(time.Now().Unix()) - params.BeaconConfig().SecondsPerETH1Block*params.BeaconConfig().Eth1FollowDistance
 		f.GenesisTime = uint64(time.Now().Unix())
 		log.Info("No genesis time specified, defaulting to now()")
 	}
@@ -253,6 +253,8 @@ func generateGenesis(ctx context.Context) (state.BeaconState, error) {
 		if err != nil {
 			return nil, err
 		}
+
+		depositDataRoots = roots
 		opts = append(opts, interop.WithDepositData(dds, roots))
 	} else if nv == 0 {
 		return nil, fmt.Errorf(
@@ -311,15 +313,15 @@ func generateGenesis(ctx context.Context) (state.BeaconState, error) {
 
 	if f.OverrideEth1Data {
 		log.Print("Overriding Eth1Data with data from execution client")
-		conn, err := rpc.Dial(generateGenesisStateFlags.ExecutionEndpoint)
-		if err != nil {
-			return nil, errors.Wrapf(
-				err,
-				"could not dial %s please make sure you are running your execution client",
-				generateGenesisStateFlags.ExecutionEndpoint)
-		}
-		client := ethclient.NewClient(conn)
-		header, err := client.HeaderByNumber(ctx, big.NewInt(0))
+		//conn, err := rpc.Dial(generateGenesisStateFlags.ExecutionEndpoint)
+		//if err != nil {
+		//	return nil, errors.Wrapf(
+		//		err,
+		//		"could not dial %s please make sure you are running your execution client",
+		//		generateGenesisStateFlags.ExecutionEndpoint)
+		//}
+		//client := ethclient.NewClient(conn)
+		//header, err := client.HeaderByNumber(ctx, big.NewInt(0))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get header by number")
 		}
@@ -327,14 +329,23 @@ func generateGenesis(ctx context.Context) (state.BeaconState, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "could not create deposit tree")
 		}
+		for index, depositDataRoot := range depositDataRoots {
+			err = t.Insert(depositDataRoot, index)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not insert depositDataRoot into deposit tree")
+			}
+		}
 		depositRoot, err := t.HashTreeRoot()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get hash tree root")
 		}
+		log.Printf("depositRoot %v\n", hex.EncodeToString(depositRoot[:]))
+		log.Printf("EL genesis header hash %v\n", gen.ToBlock().Hash().String())
+
 		e1d := &ethpb.Eth1Data{
 			DepositRoot:  depositRoot[:],
-			DepositCount: 0,
-			BlockHash:    header.Hash().Bytes(),
+			DepositCount: uint64(len(depositDataRoots)),
+			BlockHash:    gen.ToBlock().Hash().Bytes(),
 		}
 		if err := genesisState.SetEth1Data(e1d); err != nil {
 			return nil, err

@@ -102,6 +102,7 @@ var appFlags = []cli.Flag{
 	cmd.P2PDenyList,
 	cmd.PubsubQueueSize,
 	cmd.DataDirFlag,
+	cmd.InitialValidatorsDirFlag,
 	cmd.VerbosityFlag,
 	cmd.EnableTracingFlag,
 	cmd.TracingProcessNameFlag,

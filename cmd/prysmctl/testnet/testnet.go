@@ -8,6 +8,8 @@ var Commands = []*cli.Command{
 		Usage: "commands for dealing with Ethereum beacon chain testnets",
 		Subcommands: []*cli.Command{
 			generateGenesisStateCmd,
+			generateValidatorsCmd,
+			depositInGenesisCmd,
 		},
 	},
 }

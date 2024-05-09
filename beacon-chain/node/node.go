@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/helpers"
+	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"net"
 	"os"
 	"os/signal"
@@ -576,6 +578,20 @@ func (b *BeaconNode) startDB(cliCtx *cli.Context, depositAddress string) error {
 		return errors.Wrap(err, "could not create deposit cache")
 	}
 
+	initialValidatorsDirFlag := cliCtx.String(cmd.InitialValidatorsDirFlag.Name)
+	roots, dds, err := helpers.ParseInitialValidators(initialValidatorsDirFlag)
+	if err != nil {
+		return errors.Wrap(err, "could not parse validators")
+	}
+	for index, dd := range dds {
+		deposit := &ethpb.Deposit{
+			Data: dd,
+		}
+		err = depositCache.InsertDeposit(b.ctx, deposit, 0, int64(index), [32]byte(roots[index]))
+		if err != nil {
+			panic(err)
+		}
+	}
 	b.depositCache = depositCache
 
 	if b.GenesisInitializer != nil {
@@ -820,10 +836,15 @@ func (b *BeaconNode) registerPOWChainService() error {
 		execution.WithFinalizedStateAtStartup(b.finalizedStateAtStartUp),
 		execution.WithJwtId(b.cliCtx.String(flags.JwtId.Name)),
 	)
+
 	web3Service, err := execution.NewService(b.ctx, opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not register proof-of-work chain web3Service")
 	}
+	//initialValidatorsDir := b.cliCtx.String(cmd.InitialValidatorsDirFlag.Name)
+	//if initialValidatorsDir != nil {
+	//
+	//}
 
 	return b.services.RegisterService(web3Service)
 }
