@@ -32,7 +32,7 @@ func (s *Server) Columns(w http.ResponseWriter, r *http.Request) {
 	segments := strings.Split(r.URL.Path, "/")
 	blockId := segments[len(segments)-1]
 
-	log.Debugf("blockId is %s, indices is %v", blockId, indices)
+	//log.Debugf("blockId is %s, indices is %v", blockId, indices)
 	verifiedColumns, rpcErr := s.Blocker.Columns(ctx, blockId, indices)
 	if rpcErr != nil {
 		code := core.ErrorReasonToHTTP(rpcErr.Reason)
@@ -51,7 +51,7 @@ func (s *Server) Columns(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	log.Debugf("verifiedColumns length is %d", len(verifiedColumns))
+	//log.Debugf("verifiedColumns length is %d", len(verifiedColumns))
 	for i := range verifiedColumns {
 		sidecars = append(sidecars, verifiedColumns[i].ColumnSidecar)
 	}
@@ -106,6 +106,7 @@ func buildColumnSidecarsResponse(columnSidecars []*eth.ColumnSidecar) *structs.C
 	for i, sc := range columnSidecars {
 		var proofs = make([]*structs.KzgCommitmentInclusionProof, len(sc.CommitmentInclusionProofs))
 		for j := range sc.CommitmentInclusionProofs {
+			proofs[j] = &structs.KzgCommitmentInclusionProof{}
 			proofs[j].CommitmentInclusionProof = make([]string, len(sc.CommitmentInclusionProofs[j].CommitmentInclusionProof))
 			for k := range sc.CommitmentInclusionProofs[j].CommitmentInclusionProof {
 				proofs[j].CommitmentInclusionProof[k] = hexutil.Encode(sc.CommitmentInclusionProofs[j].CommitmentInclusionProof[k])
