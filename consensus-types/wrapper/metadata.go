@@ -78,6 +78,12 @@ func (_ MetadataV0) MetadataObjV1() *pb.MetaDataV1 {
 	return nil
 }
 
+// MetadataObjV2 returns the inner metadata object in its type
+// specified form. If it doesn't exist then we return nothing.
+func (_ MetadataV0) MetadataObjV2() *pb.MetaDataV2 {
+	return nil
+}
+
 // Version returns the fork version of the underlying object.
 func (_ MetadataV0) Version() int {
 	return version.Phase0
@@ -153,7 +159,94 @@ func (m MetadataV1) MetadataObjV1() *pb.MetaDataV1 {
 	return m.md
 }
 
+// MetadataObjV2 returns the inner metadata object in its type
+// specified form. If it doesn't exist then we return nothing.
+func (_ MetadataV1) MetadataObjV2() *pb.MetaDataV2 {
+	return nil
+}
+
 // Version returns the fork version of the underlying object.
 func (_ MetadataV1) Version() int {
 	return version.Altair
+}
+
+// MetadataV1 is a convenience wrapper around our metadata v3 protobuf object.
+type MetadataV2 struct {
+	md *pb.MetaDataV2
+}
+
+// WrappedMetadataV1 wrappers around the provided protobuf object.
+func WrappedMetadataV2(md *pb.MetaDataV2) MetadataV2 {
+	return MetadataV2{md: md}
+}
+
+// SequenceNumber returns the sequence number from the metadata.
+func (m MetadataV2) SequenceNumber() uint64 {
+	return m.md.SeqNumber
+}
+
+// AttnetsBitfield returns the bitfield stored in the metadata.
+func (m MetadataV2) AttnetsBitfield() bitfield.Bitvector64 {
+	return m.md.Attnets
+}
+
+// InnerObject returns the underlying metadata protobuf structure.
+func (m MetadataV2) InnerObject() interface{} {
+	return m.md
+}
+
+// IsNil checks for the nilness of the underlying object.
+func (m MetadataV2) IsNil() bool {
+	return m.md == nil
+}
+
+// Copy performs a full copy of the underlying metadata object.
+func (m MetadataV2) Copy() metadata.Metadata {
+	return WrappedMetadataV2(proto.Clone(m.md).(*pb.MetaDataV2))
+}
+
+// MarshalSSZ marshals the underlying metadata object
+// into its serialized form.
+func (m MetadataV2) MarshalSSZ() ([]byte, error) {
+	return m.md.MarshalSSZ()
+}
+
+// MarshalSSZTo marshals the underlying metadata object
+// into its serialized form into the provided byte buffer.
+func (m MetadataV2) MarshalSSZTo(dst []byte) ([]byte, error) {
+	return m.md.MarshalSSZTo(dst)
+}
+
+// SizeSSZ returns the serialized size of the metadata object.
+func (m MetadataV2) SizeSSZ() int {
+	return m.md.SizeSSZ()
+}
+
+// UnmarshalSSZ unmarshals the provided byte buffer into
+// the underlying metadata object.
+func (m MetadataV2) UnmarshalSSZ(buf []byte) error {
+	return m.md.UnmarshalSSZ(buf)
+}
+
+// MetadataObjV0 returns the inner metadata object in its type
+// specified form. If it doesn't exist then we return nothing.
+func (_ MetadataV2) MetadataObjV0() *pb.MetaDataV0 {
+	return nil
+}
+
+// MetadataObjV1 returns the inner metadata object in its type
+// specified form. If it doesn't exist then we return nothing.
+func (_ MetadataV2) MetadataObjV1() *pb.MetaDataV1 {
+	return nil
+}
+
+// MetadataObjV2 returns the inner metadata object in its type
+// specified form. If it doesn't exist then we return nothing.
+func (m MetadataV2) MetadataObjV2() *pb.MetaDataV2 {
+	return m.md
+}
+
+// Version returns the fork version of the underlying object.
+func (_ MetadataV2) Version() int {
+	return version.Deneb
 }

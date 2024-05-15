@@ -451,6 +451,65 @@ func (s *Service) subscribeDynamicWithSubnets(
 	}()
 }
 
+// subscribe to a dynamically changing list of subnets. This method expects a fmt compatible
+// string for the topic name and the list of subnets for subscribed topics that should be
+// maintained.
+func (s *Service) subscribeDynamicWithColumnSubnets(
+	topicFormat string,
+	validate wrappedVal,
+	handle subHandler,
+	digest [4]byte,
+) {
+	genRoot := s.cfg.clock.GenesisValidatorsRoot()
+	_, e, err := forks.RetrieveForkDataFromDigest(digest, genRoot[:])
+	if err != nil {
+		// Impossible condition as it would mean digest does not exist.
+		panic(err)
+	}
+	base := p2p.GossipTopicMappings(topicFormat, e)
+	if base == nil {
+		panic(fmt.Sprintf("%s is not mapped to any message in GossipTopicMappings", topicFormat))
+	}
+	// TODO: replace constants with a BeaconConfig param
+	subscriptions := make(map[uint64]*pubsub.Subscription, 128)
+	genesis := s.cfg.clock.GenesisTime()
+	ticker := slots.NewSlotTicker(genesis, params.BeaconConfig().SecondsPerSlot)
+
+	go func() {
+		for {
+			select {
+			case <-s.ctx.Done():
+				ticker.Done()
+				return
+			case currentSlot := <-ticker.C():
+				if s.chainStarted.IsSet() && s.cfg.initialSync.Syncing() {
+					continue
+				}
+				valid, err := isDigestValid(digest, genesis, genRoot)
+				if err != nil {
+					log.Error(err)
+					continue
+				}
+				if !valid {
+					log.Warnf("Attestation subnets with digest %#x are no longer valid, unsubscribing from all of them.", digest)
+					// Unsubscribes from all our current subnets.
+					s.reValidateSubscriptions(subscriptions, []uint64{}, topicFormat, digest)
+					ticker.Done()
+					return
+				}
+				wantedSubs := s.retrievePersistentColSubs(currentSlot)
+				// Resize as appropriate.
+				s.reValidateSubscriptions(subscriptions, wantedSubs, topicFormat, digest)
+
+				// subscribe desired column subnets.
+				for _, idx := range wantedSubs {
+					s.subscribeColSubnet(subscriptions, idx, digest, validate, handle)
+				}
+			}
+		}
+	}()
+}
+
 // revalidate that our currently connected subnets are valid.
 func (s *Service) reValidateSubscriptions(subscriptions map[uint64]*pubsub.Subscription,
 	wantedSubs []uint64, topicFormat string, digest [4]byte) {
@@ -489,6 +548,33 @@ func (s *Service) subscribeAggregatorSubnet(
 	}
 	if !s.validPeersExist(subnetTopic) {
 		log.Debugf("No peers found subscribed to attestation gossip subnet with "+
+			"committee index %d. Searching network for peers subscribed to the subnet.", idx)
+		_, err := s.cfg.p2p.FindPeersWithSubnet(s.ctx, subnetTopic, idx, flags.Get().MinimumPeersPerSubnet)
+		if err != nil {
+			log.WithError(err).Debug("Could not search for peers")
+		}
+	}
+}
+
+// subscribe missing subnets for our column subnets.
+func (s *Service) subscribeColSubnet(
+	subscriptions map[uint64]*pubsub.Subscription,
+	idx uint64,
+	digest [4]byte,
+	validate wrappedVal,
+	handle subHandler,
+) {
+	// do not subscribe if we have no peers in the same
+	// subnet
+	// TODO: add column subnet message type
+	topic := p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.SyncCommitteeMessage{})]
+	subnetTopic := fmt.Sprintf(topic, digest, idx)
+	// check if subscription exists and if not subscribe the relevant subnet.
+	if _, exists := subscriptions[idx]; !exists {
+		subscriptions[idx] = s.subscribeWithBase(subnetTopic, validate, handle)
+	}
+	if !s.validPeersExist(subnetTopic) {
+		log.Debugf("No peers found subscribed to column gossip subnet with "+
 			"committee index %d. Searching network for peers subscribed to the subnet.", idx)
 		_, err := s.cfg.p2p.FindPeersWithSubnet(s.ctx, subnetTopic, idx, flags.Get().MinimumPeersPerSubnet)
 		if err != nil {
@@ -692,7 +778,17 @@ func (s *Service) retrievePersistentSubs(currSlot primitives.Slot) []uint64 {
 	return slice.SetUint64(append(persistentSubs, wantedSubs...))
 }
 
-func (*Service) retrieveActiveSyncSubnets(currEpoch primitives.Epoch) []uint64 {
+func (s *Service) retrievePersistentColSubs(currSlot primitives.Slot) []uint64 {
+	// Persistent subscriptions from beacon node
+	persistentSubs := s.persistentColumnSubnetIndices()
+	// Update desired topic indices from validators
+	wantedSubs := s.validatorColumnSubnetIndices(currSlot)
+
+	// Combine subscriptions to get all requested subscriptions
+	return slice.SetUint64(append(persistentSubs, wantedSubs...))
+}
+
+func (_ *Service) retrieveActiveSyncSubnets(currEpoch primitives.Epoch) []uint64 {
 	subs := cache.SyncSubnetIDs.GetAllSubnets(currEpoch)
 	return slice.SetUint64(subs)
 }

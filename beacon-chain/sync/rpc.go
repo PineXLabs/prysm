@@ -106,6 +106,10 @@ func (s *Service) registerRPCHandlersDeneb() {
 		p2p.RPCBlobSidecarsByRootTopicV1,
 		s.blobSidecarByRootRPCHandler,
 	)
+	s.registerRPC(
+		p2p.RPCMetaDataTopicV3,
+		s.metaDataHandler,
+	)
 }
 
 // Remove all v1 Stream handlers that are no longer supported
