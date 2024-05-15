@@ -414,6 +414,8 @@ func TestRefreshENR_ForkBoundaries(t *testing.T) {
 				// Update params
 				cfg := params.BeaconConfig().Copy()
 				cfg.AltairForkEpoch = 5
+				// set deneb epoch to a big value
+				cfg.DenebForkEpoch = 100
 				params.OverrideBeaconConfig(cfg)
 				params.BeaconConfig().InitializeForkSchedule()
 
@@ -496,6 +498,47 @@ func TestRefreshENR_ForkBoundaries(t *testing.T) {
 			postValidation: func(t *testing.T, s *Service) {
 				assert.Equal(t, version.Altair, s.metaData.Version())
 				assert.DeepEqual(t, bitfield.Bitvector4{0x03}, s.metaData.MetadataObjV1().Syncnets)
+				assert.DeepEqual(t, bitfield.Bitvector64{0xe, 0x0, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0}, s.metaData.AttnetsBitfield())
+			},
+		},
+		{
+			name: "metadata updated past fork epoch with bitfields in deneb",
+			svcBuilder: func(t *testing.T) *Service {
+				port := 2000
+				ipAddr, pkey := createAddrAndPrivKey(t)
+				s := &Service{
+					genesisTime:           time.Now().Add(-6 * oneEpochDuration()),
+					genesisValidatorsRoot: bytesutil.PadTo([]byte{'A'}, 32),
+					cfg:                   &Config{UDPPort: uint(port)},
+				}
+				listener, err := s.createListener(ipAddr, pkey)
+				assert.NoError(t, err)
+
+				// Update params
+				cfg := params.BeaconConfig().Copy()
+				cfg.DenebForkEpoch = 5
+				params.OverrideBeaconConfig(cfg)
+				params.BeaconConfig().InitializeForkSchedule()
+
+				s.dv5Listener = listener
+				s.metaData = wrapper.WrappedMetadataV0(new(ethpb.MetaDataV0))
+				s.updateSubnetRecordWithMetadata([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+				cache.SubnetIDs.AddPersistentCommittee([]uint64{1, 2, 3, 23}, 0)
+				cache.SyncSubnetIDs.AddSyncCommitteeSubnets([]byte{'A'}, 0, []uint64{0, 1}, 0)
+				return s
+			},
+			postValidation: func(t *testing.T, s *Service) {
+				currEpoch := slots.ToEpoch(slots.CurrentSlot(uint64(s.genesisTime.Unix())))
+				subs, err := computeSubscribedColumnSubnets(s.dv5Listener.LocalNode().ID(), currEpoch)
+				assert.NoError(t, err)
+
+				bitV := bitfield.NewBitvector64()
+				for _, idx := range subs {
+					bitV.SetBitAt(idx, true)
+				}
+				assert.Equal(t, version.Deneb, s.metaData.Version())
+				assert.DeepEqual(t, bitfield.Bitvector4{0x03}, s.metaData.MetadataObjV2().Syncnets)
+				assert.DeepEqual(t, bitV, s.metaData.MetadataObjV2().Colnets)
 				assert.DeepEqual(t, bitfield.Bitvector64{0xe, 0x0, 0x80, 0x0, 0x0, 0x0, 0x0, 0x0}, s.metaData.AttnetsBitfield())
 			},
 		},

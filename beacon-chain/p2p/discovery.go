@@ -47,7 +47,12 @@ func (s *Service) RefreshENR() {
 		log.WithError(err).Error("Could not initialize persistent subnets")
 		return
 	}
-
+	if currEpoch >= params.BeaconConfig().DenebForkEpoch {
+		if err := initializePersistentColumnSubnets(s.dv5Listener.LocalNode().ID(), currEpoch); err != nil {
+			log.WithError(err).Error("Could not initialize persistent column subnets")
+			return
+		}
+	}
 	bitV := bitfield.NewBitvector64()
 	committees := cache.SubnetIDs.GetAllSubnets()
 	for _, idx := range committees {
@@ -61,9 +66,17 @@ func (s *Service) RefreshENR() {
 
 	// Compare current epoch with our fork epochs
 	altairForkEpoch := params.BeaconConfig().AltairForkEpoch
+	denebForkEpoch := params.BeaconConfig().DenebForkEpoch
 	switch {
-	// Altair Behaviour
-	case currEpoch >= altairForkEpoch:
+	case currEpoch < altairForkEpoch:
+		// Phase 0 behaviour.
+		if bytes.Equal(bitV, currentBitV) {
+			// return early if bitfield hasn't changed
+			return
+		}
+		s.updateSubnetRecordWithMetadata(bitV)
+	case currEpoch < denebForkEpoch && currEpoch >= altairForkEpoch:
+
 		// Retrieve sync subnets from application level
 		// cache.
 		bitS := bitfield.Bitvector4{byte(0x00)}
@@ -83,12 +96,32 @@ func (s *Service) RefreshENR() {
 		}
 		s.updateSubnetRecordWithMetadataV2(bitV, bitS)
 	default:
-		// Phase 0 behaviour.
-		if bytes.Equal(bitV, currentBitV) {
-			// return early if bitfield hasn't changed
+		bitS := bitfield.Bitvector4{byte(0x00)}
+		committees = cache.SyncSubnetIDs.GetAllSubnets(currEpoch)
+		for _, idx := range committees {
+			bitS.SetBitAt(idx, true)
+		}
+		currentBitS, err := syncBitvector(s.dv5Listener.Self().Record())
+		if err != nil {
+			log.WithError(err).Error("Could not retrieve sync bitfield")
 			return
 		}
-		s.updateSubnetRecordWithMetadata(bitV)
+		bitC := bitfield.NewBitvector64()
+		colSubnets := cache.SubnetIDs.GetAllColumnSubnets()
+		for _, idx := range colSubnets {
+			bitC.SetBitAt(idx, true)
+		}
+		currentBitC, err := colBitvector(s.dv5Listener.Self().Record())
+		if err != nil {
+			log.WithError(err).Error("Could not retrieve column bitfield")
+			return
+		}
+		if bytes.Equal(bitV, currentBitV) && bytes.Equal(bitS, currentBitS) &&
+			bytes.Equal(bitC, currentBitC) && s.Metadata().Version() == version.Altair {
+			// return early if bitfields haven't changed
+			return
+		}
+		s.updateSubnetRecordWithMetadataV3(bitV, bitS, bitC)
 	}
 	// ping all peers to inform them of new metadata
 	s.pingPeers()
@@ -243,6 +276,7 @@ func (s *Service) createLocalNode(
 		return nil, errors.Wrap(err, "could not add eth2 fork version entry to enr")
 	}
 	localNode = initializeAttSubnets(localNode)
+	localNode = initializeColSubnets(localNode)
 	return initializeSyncCommSubnets(localNode), nil
 }
 

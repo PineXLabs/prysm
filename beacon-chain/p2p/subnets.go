@@ -28,8 +28,14 @@ import (
 var attestationSubnetCount = params.BeaconConfig().AttestationSubnetCount
 var syncCommsSubnetCount = params.BeaconConfig().SyncCommitteeSubnetCount
 
+// TODO: use a BeaconNetworkConfig parameter to define contstant
+var colSubnetCount uint64 = 64
+
 var attSubnetEnrKey = params.BeaconNetworkConfig().AttSubnetKey
 var syncCommsSubnetEnrKey = params.BeaconNetworkConfig().SyncCommsSubnetKey
+
+// TODO: use a BeaconNetworkConfig parameter to define contstant
+var colSubnetEnrKey = "colSubnetEntry"
 
 // The value used with the subnet, inorder
 // to create an appropriate key to retrieve
@@ -69,6 +75,8 @@ func (s *Service) FindPeersWithSubnet(ctx context.Context, topic string,
 		iterator = filterNodes(ctx, iterator, s.filterPeerForAttSubnet(index))
 	case strings.Contains(topic, GossipSyncCommitteeMessage):
 		iterator = filterNodes(ctx, iterator, s.filterPeerForSyncSubnet(index))
+	case strings.Contains(topic, GossipColumnSidecarMessage):
+		iterator = filterNodes(ctx, iterator, s.filterPeerForColSubnet(index))
 	default:
 		return false, errors.New("no subnet exists for provided topic")
 	}
@@ -146,6 +154,27 @@ func (s *Service) filterPeerForSyncSubnet(index uint64) func(node *enode.Node) b
 	}
 }
 
+// returns a method with filters peers specifically for a particular col subnet.
+func (s *Service) filterPeerForColSubnet(index uint64) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		if !s.filterPeer(node) {
+			return false
+		}
+		subnets, err := colSubnets(node.Record())
+		if err != nil {
+			return false
+		}
+		indExists := false
+		for _, comIdx := range subnets {
+			if comIdx == index {
+				indExists = true
+				break
+			}
+		}
+		return indExists
+	}
+}
+
 // lower threshold to broadcast object compared to searching
 // for a subnet. So that even in the event of poor peer
 // connectivity, we can still broadcast an attestation.
@@ -185,6 +214,22 @@ func (s *Service) updateSubnetRecordWithMetadataV2(bitVAtt bitfield.Bitvector64,
 	})
 }
 
+// TODO: use ssz and protobuf to generate codec files
+func (s *Service) updateSubnetRecordWithMetadataV3(bitVAtt bitfield.Bitvector64, bitVSync bitfield.Bitvector4, bitVCol bitfield.Bitvector64) {
+	entry := enr.WithEntry(attSubnetEnrKey, &bitVAtt)
+	subEntry := enr.WithEntry(syncCommsSubnetEnrKey, &bitVSync)
+	colEntry := enr.WithEntry(colSubnetEnrKey, &bitVCol)
+	s.dv5Listener.LocalNode().Set(entry)
+	s.dv5Listener.LocalNode().Set(subEntry)
+	s.dv5Listener.LocalNode().Set(colEntry)
+	s.metaData = wrapper.WrappedMetadataV2(&pb.MetaDataV2{
+		SeqNumber: s.metaData.SequenceNumber() + 1,
+		Attnets:   bitVAtt,
+		Syncnets:  bitVSync,
+		Colnets:   bitVCol,
+	})
+}
+
 func initializePersistentSubnets(id enode.ID, epoch primitives.Epoch) error {
 	_, ok, expTime := cache.SubnetIDs.GetPersistentSubnets()
 	if ok && expTime.After(time.Now()) {
@@ -196,6 +241,20 @@ func initializePersistentSubnets(id enode.ID, epoch primitives.Epoch) error {
 	}
 	newExpTime := computeSubscriptionExpirationTime(id, epoch)
 	cache.SubnetIDs.AddPersistentCommittee(subs, newExpTime)
+	return nil
+}
+
+func initializePersistentColumnSubnets(id enode.ID, epoch primitives.Epoch) error {
+	_, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	if ok && expTime.After(time.Now()) {
+		return nil
+	}
+	subs, err := computeSubscribedColumnSubnets(id, epoch)
+	if err != nil {
+		return err
+	}
+	newExpTime := computeSubscriptionExpirationTime(id, epoch)
+	cache.SubnetIDs.AddPersistentColumnSubnets(subs, newExpTime)
 	return nil
 }
 
@@ -212,6 +271,28 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 			return nil, err
 		}
 		subs = append(subs, sub)
+	}
+	return subs, nil
+}
+
+func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64, error) {
+	subs := []uint64{}
+	seed := hash.Hash(bytesutil.Bytes8(uint64(epoch)))
+	offsetHash := hash.Hash(seed[:])
+	offset := uint256.NewInt(0).SetBytes(offsetHash[:])
+	// TODO: replace with BeaconConfig
+	subnetNumber := uint64(64)
+	subnets := make([]primitives.ValidatorIndex, subnetNumber)
+	for i := range subnets {
+		subnets[i] = primitives.ValidatorIndex(i)
+	}
+	helpers.ShuffleList(subnets, seed)
+
+	// TODO: replace with BeaconConfig
+	subnetRequired := 8
+	colIdxs := selectNearestColumnSubnets(nodeID, offset, int(subnetNumber), subnetRequired)
+	for _, i := range colIdxs {
+		subs = append(subs, uint64(subnets[i]))
 	}
 	return subs, nil
 }
@@ -238,6 +319,19 @@ func computeSubscribedSubnet(nodeID enode.ID, epoch primitives.Epoch, index uint
 		return 0, err
 	}
 	subnet := (uint64(permutatedPrefix) + index) % params.BeaconConfig().AttestationSubnetCount
+	return subnet, nil
+}
+
+func computeSubscribedColumnSubnet(nodeID enode.ID, epoch primitives.Epoch, index uint64) (uint64, error) {
+	nodeOffset, nodeIdPrefix := computeOffsetAndPrefix(nodeID)
+	seedInput := (nodeOffset + uint64(epoch)) / params.BeaconConfig().EpochsPerSubnetSubscription
+	permSeed := hash.Hash(bytesutil.Bytes8(seedInput))
+	permutatedPrefix, err := helpers.ComputeShuffledIndex(primitives.ValidatorIndex(nodeIdPrefix), 1<<params.BeaconConfig().AttestationSubnetPrefixBits, permSeed, true)
+	if err != nil {
+		return 0, err
+	}
+	// TODO: use beacon config to save subnet numbers
+	subnet := (uint64(permutatedPrefix) + index) % 64
 	return subnet, nil
 }
 
@@ -275,6 +369,15 @@ func initializeAttSubnets(node *enode.LocalNode) *enode.LocalNode {
 func initializeSyncCommSubnets(node *enode.LocalNode) *enode.LocalNode {
 	bitV := bitfield.Bitvector4{byte(0x00)}
 	entry := enr.WithEntry(syncCommsSubnetEnrKey, bitV.Bytes())
+	node.Set(entry)
+	return node
+}
+
+// Initializes a bitvector of column subnets beacon nodes is subscribed to
+// and creates a new ENR entry with its default value.
+func initializeColSubnets(node *enode.LocalNode) *enode.LocalNode {
+	bitV := bitfield.NewBitvector64()
+	entry := enr.WithEntry(colSubnetEnrKey, bitV.Bytes())
 	node.Set(entry)
 	return node
 }
@@ -319,6 +422,26 @@ func syncSubnets(record *enr.Record) ([]uint64, error) {
 	return committeeIdxs, nil
 }
 
+// Reads the col subnets entry from a node's ENR and determines
+// the committee indices of the col subnets the node is subscribed to.
+func colSubnets(record *enr.Record) ([]uint64, error) {
+	bitV, err := colBitvector(record)
+	if err != nil {
+		return nil, err
+	}
+	// lint:ignore uintcast -- subnet count can be safely cast to int.
+	if len(bitV) != byteCount(int(colSubnetCount)) {
+		return []uint64{}, errors.Errorf("invalid bitvector provided, it has a size of %d", len(bitV))
+	}
+	var committeeIdxs []uint64
+	for i := uint64(0); i < colSubnetCount; i++ {
+		if bitV.BitAt(i) {
+			committeeIdxs = append(committeeIdxs, i)
+		}
+	}
+	return committeeIdxs, nil
+}
+
 // Parses the attestation subnets ENR entry in a node and extracts its value
 // as a bitvector for further manipulation.
 func attBitvector(record *enr.Record) (bitfield.Bitvector64, error) {
@@ -329,6 +452,18 @@ func attBitvector(record *enr.Record) (bitfield.Bitvector64, error) {
 		return nil, err
 	}
 	return bitV, nil
+}
+
+// Parses the column das subnets ENR entry in a node and extracts its value
+// as a bitvector for further manipulation.
+func colBitvector(record *enr.Record) (bitfield.Bitvector64, error) {
+	bitC := bitfield.NewBitvector64()
+	entry := enr.WithEntry(colSubnetEnrKey, &bitC)
+	err := record.Load(entry)
+	if err != nil {
+		return nil, err
+	}
+	return bitC, nil
 }
 
 // Parses the attestation subnets ENR entry in a node and extracts its value

@@ -16,6 +16,9 @@ const SchemaVersionV1 = "/1"
 // SchemaVersionV2 specifies the next schema version for our rpc protocol ID.
 const SchemaVersionV2 = "/2"
 
+// SchemaVersionV3 specifies the next schema version for our rpc protocol ID.
+const SchemaVersionV3 = "/3"
+
 // Specifies the protocol prefix for all our Req/Resp topics.
 const protocolPrefix = "/eth2/beacon_chain/req"
 
@@ -73,6 +76,9 @@ const (
 	RPCBlocksByRootTopicV2 = protocolPrefix + BeaconBlocksByRootsMessageName + SchemaVersionV2
 	// RPCMetaDataTopicV2 defines the v2 topic for the metadata rpc method.
 	RPCMetaDataTopicV2 = protocolPrefix + MetadataMessageName + SchemaVersionV2
+
+	// V3 RPC Topics
+	RPCMetaDataTopicV3 = protocolPrefix + MetadataMessageName + SchemaVersionV3
 )
 
 // RPC errors for topic parsing.
@@ -128,9 +134,15 @@ var altairMapping = map[string]bool{
 	MetadataMessageName:            true,
 }
 
+// Maps all the RPC messages which are to updated in altair.
+var denebMapping = map[string]bool{
+	MetadataMessageName: true,
+}
+
 var versionMapping = map[string]bool{
 	SchemaVersionV1: true,
 	SchemaVersionV2: true,
+	SchemaVersionV3: true,
 }
 
 // OmitContextBytesV1 keeps track of which RPC methods do not write context bytes in their v1 incarnations.
@@ -265,6 +277,10 @@ func TopicFromMessage(msg string, epoch primitives.Epoch) (string, error) {
 	isAltair := epoch >= params.BeaconConfig().AltairForkEpoch
 	if isAltair && altairMapping[msg] {
 		version = SchemaVersionV2
+	}
+	isDeneb := epoch >= params.BeaconConfig().DenebForkEpoch
+	if isDeneb && denebMapping[msg] {
+		version = SchemaVersionV3
 	}
 	return protocolPrefix + msg + version, nil
 }
