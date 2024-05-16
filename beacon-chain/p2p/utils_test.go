@@ -3,9 +3,6 @@ package p2p
 import (
 	"crypto/rand"
 	"fmt"
-	"math"
-	"math/big"
-	"sort"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -70,55 +67,25 @@ func TestSerializeENR(t *testing.T) {
 	})
 }
 
-type distIdxSlice []distIdx
+func TestDistance(t *testing.T) {
+	idBytes := make([]byte, 32)
+	rand.Read(idBytes)
+	nid1 := enode.ID([32]byte(idBytes))
 
-func (s distIdxSlice) Len() int {
-	return len(s)
-}
-func (s distIdxSlice) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
-}
-func (s distIdxSlice) Less(i, j int) bool {
-	return s[i].dist.Lt(s[j].dist)
-}
+	idBytes2 := make([]byte, 32)
+	rand.Read(idBytes2)
+	nid2 := enode.ID([32]byte(idBytes2))
 
-func TestSelectNearestColumnSunbet(t *testing.T) {
-	t.Run("random nodeID", func(t *testing.T) {
-		idBytes := make([]byte, 32)
-		rand.Read(idBytes)
-		nid := enode.ID([32]byte(idBytes))
-		nodeIDUint256 := uint256.NewInt(0).SetBytes(nid.Bytes())
+	idBytes3 := make([]byte, 32)
+	rand.Read(idBytes2)
+	nid3 := enode.ID([32]byte(idBytes3))
 
-		offset := uint256.NewInt(0).SetBytes(nid[:])
-
-		subnetNumber := 64
-		log2ColSubnetNum := math.Log2(float64(subnetNumber))
-		distance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetNum)+1), nil)
-		subnetIdDist := uint256.NewInt(0)
-		subnetIdDist.SetFromBig(distance)
-		halfDistance := uint256.NewInt(0).Div(subnetIdDist, uint256.NewInt(2))
-		offset.Mod(offset, halfDistance)
-
-		selected := selectNearestColumnSubnets(nid, offset, 64, 8)
-		require.Equal(t, 8, len(selected))
-		smap := make(map[int]struct{})
-		for _, s := range selected {
-			smap[s] = struct{}{}
-		}
-		cols := make(distIdxSlice, subnetNumber)
-		for i := range cols {
-			colId := uint256.NewInt(uint64(i + 1))
-			colId.Mul(colId, subnetIdDist).Add(colId, offset)
-			distance := uint256.NewInt(0).Xor(colId, nodeIDUint256)
-			cols[i].idx = i
-			cols[i].dist = distance
-		}
-		sort.Sort(distIdxSlice(cols))
-		cols = cols[:8]
-		for _, col := range cols {
-			_, ok := smap[col.idx]
-			require.Equal(t, true, ok)
-		}
-	})
-
+	nid1Uint256 := uint256.NewInt(0).SetBytes(nid1.Bytes())
+	nid2Uint256 := uint256.NewInt(0).SetBytes(nid2.Bytes())
+	nid3Uint256 := uint256.NewInt(0).SetBytes(nid3.Bytes())
+	dist12 := uint256.NewInt(0).Xor(nid1Uint256, nid2Uint256)
+	dist13 := uint256.NewInt(0).Xor(nid1Uint256, nid3Uint256)
+	ge := dist12.Gt(dist13)
+	ge2 := enode.DistCmp(nid1, nid2, nid3) > 0
+	require.Equal(t, ge, ge2)
 }
