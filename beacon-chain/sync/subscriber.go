@@ -781,11 +781,9 @@ func (s *Service) retrievePersistentSubs(currSlot primitives.Slot) []uint64 {
 func (s *Service) retrievePersistentColSubs(currSlot primitives.Slot) []uint64 {
 	// Persistent subscriptions from beacon node
 	persistentSubs := s.persistentColumnSubnetIndices()
-	// Update desired topic indices from validators
-	wantedSubs := s.validatorColumnSubnetIndices(currSlot)
 
 	// Combine subscriptions to get all requested subscriptions
-	return slice.SetUint64(append(persistentSubs, wantedSubs...))
+	return slice.SetUint64(append(persistentSubs))
 }
 
 func (_ *Service) retrieveActiveSyncSubnets(currEpoch primitives.Epoch) []uint64 {

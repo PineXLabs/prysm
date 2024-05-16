@@ -247,11 +247,12 @@ func initializePersistentColumnSubnets(id enode.ID, epoch primitives.Epoch) erro
 	if ok && expTime.After(time.Now()) {
 		return nil
 	}
-	subs, err := computeSubscribedColumnSubnets(id, epoch)
+	extraRequired := cache.SubnetIDs.GetExtraRequiredColumns()
+	subs, err := computeSubscribedColumnSubnets(id, epoch, extraRequired)
 	if err != nil {
 		return err
 	}
-	newExpTime := computeSubscriptionExpirationTime(id, epoch)
+	newExpTime := computeColumnSubnetSubscriptionExpirationTime(id, epoch)
 	cache.SubnetIDs.AddPersistentColumnSubnets(subs, newExpTime)
 	return nil
 }
@@ -275,9 +276,13 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 	return subs, nil
 }
 
-func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64, error) {
+func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, extraRequired int) ([]uint64, error) {
 	subs := []uint64{}
-	seed := hash.Hash(bytesutil.Bytes8(uint64(epoch)))
+	// TODO: replace with BeaconConfig
+	var subscribeEpoch uint64 = 8
+	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
+	seed := hash.Hash(bytesutil.Bytes8((uint64(epoch) + nodeOffset) % subscribeEpoch))
+
 	offsetHash := hash.Hash(seed[:])
 	offset := uint256.NewInt(0).SetBytes(offsetHash[:])
 	// TODO: replace with BeaconConfig
@@ -290,6 +295,7 @@ func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]
 
 	// TODO: replace with BeaconConfig
 	subnetRequired := 8
+	subnetRequired += extraRequired
 	colIdxs := helpers.SelectNearestColumnSubnets(nodeID, offset, int(subnetNumber), subnetRequired)
 	for _, i := range colIdxs {
 		subs = append(subs, uint64(subnets[i]))
@@ -339,6 +345,16 @@ func computeSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) 
 	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
 	pastEpochs := (nodeOffset + uint64(epoch)) % params.BeaconConfig().EpochsPerSubnetSubscription
 	remEpochs := params.BeaconConfig().EpochsPerSubnetSubscription - pastEpochs
+	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
+	epochTime := time.Duration(remEpochs) * epochDuration
+	return epochTime * time.Second
+}
+
+func computeColumnSubnetSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) time.Duration {
+	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
+	// TODO: use beacon config
+	pastEpochs := (nodeOffset + uint64(epoch)) % 8
+	remEpochs := 8 - pastEpochs
 	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	epochTime := time.Duration(remEpochs) * epochDuration
 	return epochTime * time.Second

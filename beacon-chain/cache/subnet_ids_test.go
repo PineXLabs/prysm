@@ -40,13 +40,6 @@ func TestSubnetIDsCache_RoundTrip(t *testing.T) {
 	res = c.GetAttesterSubnetIDs(slot)
 	assert.DeepEqual(t, []uint64{11, 22, 33}, res)
 
-	c.AddColumnSubnetIDs(slot, []uint64{11})
-	res = c.GetColumnSubnetIDs(slot)
-	assert.DeepEqual(t, []uint64{11}, res)
-
-	c.AddColumnSubnetIDs(slot, []uint64{22, 33})
-	res = c.GetColumnSubnetIDs(slot)
-	assert.DeepEqual(t, []uint64{11, 22, 33}, res)
 }
 
 func TestSubnetIDsCache_PersistentCommitteeRoundtrip(t *testing.T) {
