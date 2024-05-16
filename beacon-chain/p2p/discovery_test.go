@@ -529,7 +529,7 @@ func TestRefreshENR_ForkBoundaries(t *testing.T) {
 			},
 			postValidation: func(t *testing.T, s *Service) {
 				currEpoch := slots.ToEpoch(slots.CurrentSlot(uint64(s.genesisTime.Unix())))
-				subs, err := computeSubscribedColumnSubnets(s.dv5Listener.LocalNode().ID(), currEpoch)
+				subs, err := computeSubscribedColumnSubnets(s.dv5Listener.LocalNode().ID(), currEpoch, 0)
 				assert.NoError(t, err)
 
 				bitV := bitfield.NewBitvector64()

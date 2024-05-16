@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -20,10 +21,10 @@ type subnetIDs struct {
 	persistentSubnets *cache.Cache
 	subnetsLock       sync.RWMutex
 
-	columnSubnets               *lru.Cache
-	columnSubnetsLock           sync.RWMutex
-	persistentColumnSubnets     *cache.Cache
-	persistentColumnSubnetsLock sync.RWMutex
+	persistentColumnSubnets        *cache.Cache
+	persistentColumnSubnetsLock    sync.RWMutex
+	extraRequiredColumnSubnets     *cache.Cache
+	extraRequiredColumnSubnetsLock sync.RWMutex
 }
 
 // SubnetIDs for attester and aggregator.
@@ -33,46 +34,27 @@ var subnetKey = "persistent-subnets"
 
 var columnSubnetKey = "column-persistent-subnets"
 
+var extraColumRequiredKey = "extra-column-required"
+
 func newSubnetIDs() *subnetIDs {
 	// Given a node can calculate committee assignments of current epoch and next epoch.
 	// Max size is set to 2 epoch length.
 	cacheSize := int(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().MaxCommitteesPerSlot * 2)) // lint:ignore uintcast -- constant values that would panic on startup if negative.
 	attesterCache := lruwrpr.New(cacheSize)
 	aggregatorCache := lruwrpr.New(cacheSize)
-	columnSubetsCache := lruwrpr.New(cacheSize)
 	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	subLength := epochDuration * time.Duration(params.BeaconConfig().EpochsPerRandomSubnetSubscription)
 	persistentCache := cache.New(subLength*time.Second, epochDuration*time.Second)
-	persistentColumnSubnets := cache.New(subLength*time.Second, epochDuration*time.Second)
-	return &subnetIDs{attester: attesterCache, aggregator: aggregatorCache, persistentSubnets: persistentCache, persistentColumnSubnets: persistentColumnSubnets, columnSubnets: columnSubetsCache}
-}
 
-// AddColumnSubnetIDs adds the subnet index for subscribing subnet for the das procedure of a given slot.
-func (s *subnetIDs) AddColumnSubnetIDs(slot primitives.Slot, subnetIDs []uint64) {
-	s.columnSubnetsLock.Lock()
-	defer s.columnSubnetsLock.Unlock()
-
-	ids := subnetIDs
-	val, exists := s.columnSubnets.Get(slot)
-	if exists {
-		ids = slice.UnionUint64(append(val.([]uint64), ids...))
+	// TODO: use beacon config
+	persistentColumnSubnets := cache.New(8*epochDuration*time.Second, epochDuration*time.Second)
+	extraRequiredColumnSubnets := cache.New(8*epochDuration*time.Second, epochDuration*time.Second)
+	return &subnetIDs{attester: attesterCache,
+		aggregator:                 aggregatorCache,
+		persistentSubnets:          persistentCache,
+		persistentColumnSubnets:    persistentColumnSubnets,
+		extraRequiredColumnSubnets: extraRequiredColumnSubnets,
 	}
-	s.columnSubnets.Add(slot, ids)
-}
-
-// GetColumnSubnetIDs gets the subnet IDs for subscribed subnets for das procedure of the slot.
-func (s *subnetIDs) GetColumnSubnetIDs(slot primitives.Slot) []uint64 {
-	s.columnSubnetsLock.RLock()
-	defer s.columnSubnetsLock.RUnlock()
-
-	val, exists := s.columnSubnets.Get(slot)
-	if !exists {
-		return nil
-	}
-	if v, ok := val.([]uint64); ok {
-		return v
-	}
-	return nil
 }
 
 // GetPersistentColumnSubnets retrieves the persistent subnet and expiration time of the beacon node's
@@ -113,6 +95,21 @@ func (s *subnetIDs) AddPersistentColumnSubnets(subnetIDs []uint64, duration time
 	defer s.persistentColumnSubnetsLock.Unlock()
 
 	s.persistentColumnSubnets.Set(columnSubnetKey, subnetIDs, duration)
+}
+
+func (s *subnetIDs) AddExtraRequiredSubnetRecord(validatorIndex primitives.ValidatorIndex, duration time.Duration) {
+	s.extraRequiredColumnSubnetsLock.Lock()
+	defer s.extraRequiredColumnSubnetsLock.Unlock()
+	key := fmt.Sprintf("%s_%d", extraColumRequiredKey, validatorIndex)
+	s.extraRequiredColumnSubnets.Set(key, validatorIndex, duration)
+}
+
+func (s *subnetIDs) GetExtraRequiredColumns() int {
+	s.extraRequiredColumnSubnetsLock.Lock()
+	defer s.extraRequiredColumnSubnetsLock.Unlock()
+	s.extraRequiredColumnSubnets.DeleteExpired()
+
+	return s.extraRequiredColumnSubnets.ItemCount()
 }
 
 // AddAttesterSubnetID adds the subnet index for subscribing subnet for the attester of a given slot.
@@ -225,10 +222,6 @@ func (s *subnetIDs) EmptyAllCaches() {
 	s.subnetsLock.Lock()
 	s.persistentSubnets.Flush()
 	s.subnetsLock.Unlock()
-
-	s.columnSubnetsLock.Lock()
-	s.columnSubnets.Purge()
-	s.columnSubnetsLock.Unlock()
 
 	s.persistentColumnSubnetsLock.Lock()
 	s.persistentColumnSubnets.Flush()
