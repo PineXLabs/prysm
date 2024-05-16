@@ -243,6 +243,14 @@ type BeaconChainConfig struct {
 	AttestationSubnetPrefixBits     uint64          `yaml:"ATTESTATION_SUBNET_PREFIX_BITS" spec:"true"`     // AttestationSubnetPrefixBits is defined as (ceillog2(ATTESTATION_SUBNET_COUNT) + ATTESTATION_SUBNET_EXTRA_BITS).
 	SubnetsPerNode                  uint64          `yaml:"SUBNETS_PER_NODE" spec:"true"`                   // SubnetsPerNode is the number of long-lived subnets a beacon node should be subscribed to.
 	NodeIdBits                      uint64          `yaml:"NODE_ID_BITS" spec:"true"`                       // NodeIdBits defines the bit length of a node id.
+
+	// Column related
+	ColumnSubnetCount                          uint64 `yaml:"COLUMN_SUBNET_COUNT" spec:"true"`                             // ColumnSubnetCount for column subnet count.
+	EpochsPerColumnSubnetSubscription          uint64 `yaml:"EPOCHS_PER_COLUMN_SUBNET_SUBSCRIPTION" spec:"true"`           // EpochsPerColumnSubnetSubscription specifies the minimum duration a beacon node is connected to their column subnet.
+	EpochsPerValidatorColumnSubnetSubscription uint64 `yaml:"EPOCHS_PER_VALIDATOR_COLUMN_SUBNET_SUBSCRIPTION" spec:"true"` // EpochsPerValidatorColumnSubnetSubscription specifies the minimum duration a validator is connected to their column subnet.
+	BeaconColumnSubnetCustodyRequired          uint64 `yaml:"BEACON_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"`           // BeaconColumnSubnetCustodyRequired specifies the minimum subnet that a beacon node should connected to.
+	ValidatorColumnSubnetCustodyRequired       uint64 `yaml:"VALIDATOR_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"`        // ValidatorColumnSubnetCustodyRequired specifies the extra number of subnets that a validator node should connected to.
+	ColumnCount                                uint64 `yaml:"COLUMN_COUNT" spec:"true"`                                    // ColumnCount specifies the total column count.
 }
 
 // InitializeForkSchedule initializes the schedules forks baked into the config.

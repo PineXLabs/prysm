@@ -46,9 +46,9 @@ func newSubnetIDs() *subnetIDs {
 	subLength := epochDuration * time.Duration(params.BeaconConfig().EpochsPerRandomSubnetSubscription)
 	persistentCache := cache.New(subLength*time.Second, epochDuration*time.Second)
 
-	// TODO: use beacon config
-	persistentColumnSubnets := cache.New(8*epochDuration*time.Second, epochDuration*time.Second)
-	extraRequiredColumnSubnets := cache.New(8*epochDuration*time.Second, epochDuration*time.Second)
+	colSubscirbeTime := time.Duration(params.BeaconConfig().EpochsPerColumnSubnetSubscription)
+	persistentColumnSubnets := cache.New(colSubscirbeTime*epochDuration*time.Second, epochDuration*time.Second)
+	extraRequiredColumnSubnets := cache.New(colSubscirbeTime*epochDuration*time.Second, epochDuration*time.Second)
 	return &subnetIDs{attester: attesterCache,
 		aggregator:                 aggregatorCache,
 		persistentSubnets:          persistentCache,

@@ -470,8 +470,8 @@ func (s *Service) subscribeDynamicWithColumnSubnets(
 	if base == nil {
 		panic(fmt.Sprintf("%s is not mapped to any message in GossipTopicMappings", topicFormat))
 	}
-	// TODO: replace constants with a BeaconConfig param
-	subscriptions := make(map[uint64]*pubsub.Subscription, 128)
+
+	subscriptions := make(map[uint64]*pubsub.Subscription, params.BeaconConfig().ColumnSubnetCount)
 	genesis := s.cfg.clock.GenesisTime()
 	ticker := slots.NewSlotTicker(genesis, params.BeaconConfig().SecondsPerSlot)
 
@@ -566,7 +566,7 @@ func (s *Service) subscribeColSubnet(
 ) {
 	// do not subscribe if we have no peers in the same
 	// subnet
-	// TODO: add column subnet message type
+	// TODO: dill/add column subnet message type
 	topic := p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.SyncCommitteeMessage{})]
 	subnetTopic := fmt.Sprintf(topic, digest, idx)
 	// check if subscription exists and if not subscribe the relevant subnet.
@@ -575,7 +575,7 @@ func (s *Service) subscribeColSubnet(
 	}
 	if !s.validPeersExist(subnetTopic) {
 		log.Debugf("No peers found subscribed to column gossip subnet with "+
-			"committee index %d. Searching network for peers subscribed to the subnet.", idx)
+			"column index %d. Searching network for peers subscribed to the subnet.", idx)
 		_, err := s.cfg.p2p.FindPeersWithSubnet(s.ctx, subnetTopic, idx, flags.Get().MinimumPeersPerSubnet)
 		if err != nil {
 			log.WithError(err).Debug("Could not search for peers")
