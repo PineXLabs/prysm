@@ -28,14 +28,11 @@ import (
 var attestationSubnetCount = params.BeaconConfig().AttestationSubnetCount
 var syncCommsSubnetCount = params.BeaconConfig().SyncCommitteeSubnetCount
 
-// TODO: use a BeaconNetworkConfig parameter to define contstant
-var colSubnetCount uint64 = 64
+var colSubnetCount uint64 = params.BeaconConfig().ColumnSubnetCount
 
 var attSubnetEnrKey = params.BeaconNetworkConfig().AttSubnetKey
 var syncCommsSubnetEnrKey = params.BeaconNetworkConfig().SyncCommsSubnetKey
-
-// TODO: use a BeaconNetworkConfig parameter to define contstant
-var colSubnetEnrKey = "colSubnetEntry"
+var colSubnetEnrKey = params.BeaconNetworkConfig().ColSubnetEnrKey
 
 // The value used with the subnet, inorder
 // to create an appropriate key to retrieve
@@ -214,7 +211,6 @@ func (s *Service) updateSubnetRecordWithMetadataV2(bitVAtt bitfield.Bitvector64,
 	})
 }
 
-// TODO: use ssz and protobuf to generate codec files
 func (s *Service) updateSubnetRecordWithMetadataV3(bitVAtt bitfield.Bitvector64, bitVSync bitfield.Bitvector4, bitVCol bitfield.Bitvector64) {
 	entry := enr.WithEntry(attSubnetEnrKey, &bitVAtt)
 	subEntry := enr.WithEntry(syncCommsSubnetEnrKey, &bitVSync)
@@ -249,7 +245,7 @@ func initializePersistentColumnSubnets(id enode.ID, epoch primitives.Epoch) erro
 	if ok && expTime.After(time.Now()) {
 		return nil
 	}
-	extraRequired := cache.SubnetIDs.GetExtraRequiredColumns()
+	extraRequired := cache.SubnetIDs.GetExtraRequiredColumns() * int(params.BeaconConfig().ValidatorColumnSubnetCustodyRequired)
 	subs, err := computeSubscribedColumnSubnets(id, epoch, extraRequired)
 	if err != nil {
 		return err
@@ -278,23 +274,21 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 
 func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, extraRequired int) ([]uint64, error) {
 	subs := []uint64{}
-	// TODO: replace with BeaconConfig
-	var subscribeEpoch uint64 = 8
+	var subscribeEpoch uint64 = params.BeaconConfig().EpochsPerColumnSubnetSubscription
 	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
 	seed := hash.Hash(bytesutil.Bytes8((uint64(epoch) + nodeOffset) % subscribeEpoch))
 
 	offsetHash := hash.Hash(seed[:])
 	offset := uint256.NewInt(0).SetBytes(offsetHash[:])
-	// TODO: replace with BeaconConfig
-	subnetNumber := uint64(64)
+	subnetNumber := params.BeaconConfig().ColumnSubnetCount
+
 	subnets := make([]primitives.ValidatorIndex, subnetNumber)
 	for i := range subnets {
 		subnets[i] = primitives.ValidatorIndex(i)
 	}
 	helpers.ShuffleList(subnets, seed)
 
-	// TODO: replace with BeaconConfig
-	subnetRequired := 8
+	subnetRequired := int(params.BeaconConfig().BeaconColumnSubnetCustodyRequired)
 	subnetRequired += extraRequired
 	colIdxs := helpers.SelectNearestColumnSubnets(nodeID, offset, int(subnetNumber), subnetRequired)
 	for _, i := range colIdxs {
@@ -328,19 +322,6 @@ func computeSubscribedSubnet(nodeID enode.ID, epoch primitives.Epoch, index uint
 	return subnet, nil
 }
 
-func computeSubscribedColumnSubnet(nodeID enode.ID, epoch primitives.Epoch, index uint64) (uint64, error) {
-	nodeOffset, nodeIdPrefix := computeOffsetAndPrefix(nodeID)
-	seedInput := (nodeOffset + uint64(epoch)) / params.BeaconConfig().EpochsPerSubnetSubscription
-	permSeed := hash.Hash(bytesutil.Bytes8(seedInput))
-	permutatedPrefix, err := helpers.ComputeShuffledIndex(primitives.ValidatorIndex(nodeIdPrefix), 1<<params.BeaconConfig().AttestationSubnetPrefixBits, permSeed, true)
-	if err != nil {
-		return 0, err
-	}
-	// TODO: use beacon config to save subnet numbers
-	subnet := (uint64(permutatedPrefix) + index) % 64
-	return subnet, nil
-}
-
 func computeSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) time.Duration {
 	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
 	pastEpochs := (nodeOffset + uint64(epoch)) % params.BeaconConfig().EpochsPerSubnetSubscription
@@ -352,9 +333,8 @@ func computeSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) 
 
 func computeColumnSubnetSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) time.Duration {
 	nodeOffset, _ := computeOffsetAndPrefix(nodeID)
-	// TODO: use beacon config
-	pastEpochs := (nodeOffset + uint64(epoch)) % 8
-	remEpochs := 8 - pastEpochs
+	pastEpochs := (nodeOffset + uint64(epoch)) % params.BeaconConfig().EpochsPerColumnSubnetSubscription
+	remEpochs := params.BeaconConfig().EpochsPerColumnSubnetSubscription - pastEpochs
 	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	epochTime := time.Duration(remEpochs) * epochDuration
 	return epochTime * time.Second
