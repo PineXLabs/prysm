@@ -390,6 +390,7 @@ func (s *Server) SubmitBeaconCommitteeSubscription(w http.ResponseWriter, r *htt
 		if sub.IsAggregator {
 			cache.SubnetIDs.AddAggregatorSubnetID(sub.Slot, subnet)
 		}
+		
 	}
 }
 

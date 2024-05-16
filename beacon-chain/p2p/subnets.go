@@ -290,7 +290,7 @@ func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]
 
 	// TODO: replace with BeaconConfig
 	subnetRequired := 8
-	colIdxs := selectNearestColumnSubnets(nodeID, offset, int(subnetNumber), subnetRequired)
+	colIdxs := helpers.SelectNearestColumnSubnets(nodeID, offset, int(subnetNumber), subnetRequired)
 	for _, i := range colIdxs {
 		subs = append(subs, uint64(subnets[i]))
 	}
