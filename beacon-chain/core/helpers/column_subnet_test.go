@@ -31,17 +31,13 @@ func TestSelectNearestColumnSunbet(t *testing.T) {
 		nid := enode.ID([32]byte(idBytes))
 		nodeIDUint256 := uint256.NewInt(0).SetBytes(nid.Bytes())
 
-		offset := uint256.NewInt(0).SetBytes(nid[:])
-
 		subnetNumber := 64
 		log2ColSubnetNum := math.Log2(float64(subnetNumber))
 		distance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetNum)+1), nil)
 		subnetIdDist := uint256.NewInt(0)
 		subnetIdDist.SetFromBig(distance)
-		halfDistance := uint256.NewInt(0).Div(subnetIdDist, uint256.NewInt(2))
-		offset.Mod(offset, halfDistance)
 
-		selected := SelectNearestColumnSubnets(nid, offset, 64, 8)
+		selected := SelectNearestColumnSubnets(nid, 64, 8)
 		require.Equal(t, 8, len(selected))
 		smap := make(map[int]struct{})
 		for _, s := range selected {
@@ -50,7 +46,7 @@ func TestSelectNearestColumnSunbet(t *testing.T) {
 		cols := make(distIdxSlice, subnetNumber)
 		for i := range cols {
 			colId := uint256.NewInt(uint64(i + 1))
-			colId.Mul(colId, subnetIdDist).Add(colId, offset)
+			colId.Mul(colId, subnetIdDist)
 			distance := uint256.NewInt(0).Xor(colId, nodeIDUint256)
 			cols[i].idx = i
 			cols[i].dist = distance

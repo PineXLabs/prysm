@@ -14,24 +14,20 @@ type distIdx struct {
 }
 
 // pick the <colRequired> nearest subnets to listen, by "nearest" we mean the xor distance
-// the subnet id are distributed evenly in the uint256 id space, but with an offset added
-// so that a small portion of nodes are not able to controll a subnet id easily
-func SelectNearestColumnSubnets(nodeID enode.ID, offset *uint256.Int, subnetNum int, colRequired int) []int {
+// the subnet id are distributed evenly in the uint256 id space
+func SelectNearestColumnSubnets(nodeID enode.ID, subnetCount int, colRequired int) []int {
 	nodeIDUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
-	log2ColSubnetNum := math.Log2(float64(subnetNum))
+	log2ColSubnetCount := math.Log2(float64(subnetCount))
 	// we need to make sure that none of the sunbet id is zero or max(uint256)
-	minimumSubnetIdDistance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetNum)+1), nil)
+	minimumSubnetIdDistance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetCount)+1), nil)
 	subnetIdDistance := uint256.NewInt(0)
 	subnetIdDistance.SetFromBig(minimumSubnetIdDistance)
-	halfDistance := uint256.NewInt(0).Div(subnetIdDistance, uint256.NewInt(2))
-	// offset is not allowed to be greater than half of the smallest subnetid
-	offset.Mod(offset, halfDistance)
 
-	cols := make([]distIdx, subnetNum)
+	cols := make([]distIdx, subnetCount)
 	for i := range cols {
 		colId := uint256.NewInt(uint64(i + 1))
 		// TODO: pre-calculate col ids
-		colId.Mul(colId, subnetIdDistance).Add(colId, offset)
+		colId.Mul(colId, subnetIdDistance)
 		distance := uint256.NewInt(0).Xor(colId, nodeIDUint256)
 		cols[i].idx = i
 		cols[i].dist = distance
@@ -42,6 +38,17 @@ func SelectNearestColumnSubnets(nodeID enode.ID, offset *uint256.Int, subnetNum 
 		res[i] = cols[i].idx
 	}
 	return res
+}
+
+func ColumnId(subnetCount int, columnIndex int) *uint256.Int {
+	log2ColSubnetCount := math.Log2(float64(subnetCount))
+	// we need to make sure that none of the sunbet id is zero or max(uint256)
+	minimumSubnetIdDistance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetCount)+1), nil)
+	subnetIdDistance := uint256.NewInt(0)
+	subnetIdDistance.SetFromBig(minimumSubnetIdDistance)
+	colId := uint256.NewInt(uint64(columnIndex))
+	colId.Mul(colId, subnetIdDistance)
+	return colId
 }
 
 func quickselect(arr []distIdx, left, right, k int) {
