@@ -778,7 +778,7 @@ func (s *Service) retrievePersistentColSubs(currSlot primitives.Slot) []uint64 {
 	persistentSubs := s.persistentColumnSubnetIndices()
 
 	// Combine subscriptions to get all requested subscriptions
-	return slice.SetUint64(append(persistentSubs))
+	return slice.SetUint64(persistentSubs)
 }
 
 func (_ *Service) retrieveActiveSyncSubnets(currEpoch primitives.Epoch) []uint64 {
