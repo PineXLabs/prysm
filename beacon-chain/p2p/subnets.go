@@ -302,8 +302,7 @@ func computeColumnId(columnIndex int, subnetCount int, epoch primitives.Epoch) [
 }
 
 func shuffledColumnIdsByNodeOffset(nodeOffset uint64, epoch primitives.Epoch) []primitives.ValidatorIndex {
-	var subscribeEpoch uint64 = params.BeaconConfig().EpochsPerColumnSubnetSubscription
-	seed := hash.Hash(bytesutil.Bytes8((uint64(epoch) + nodeOffset) % subscribeEpoch))
+	seed := hash.Hash(bytesutil.Bytes8((uint64(epoch) + nodeOffset)))
 	subnetNumber := params.BeaconConfig().ColumnSubnetCount
 	subnets := make([]primitives.ValidatorIndex, subnetNumber)
 	for i := range subnets {
