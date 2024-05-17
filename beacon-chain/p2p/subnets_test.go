@@ -685,9 +685,9 @@ func TestColumnSubnetComputation(t *testing.T) {
 	assert.NoError(t, err)
 	localNode := enode.NewLocalNode(db, convertedKey)
 
-	retrievedSubnets, err := computeSubscribedColumnSubnets(localNode.ID(), 1000, 0)
+	retrievedSubnets, err := computeSubscribedColumnSubnets(localNode.ID(), 1000, 8)
 	assert.NoError(t, err)
-	assert.Equal(t, len(retrievedSubnets), 8)
+	assert.Equal(t, len(retrievedSubnets), 16)
 }
 
 func TestInitializePersistentSubnets(t *testing.T) {
