@@ -286,7 +286,7 @@ func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, ext
 	return subs, nil
 }
 
-func computeColumnId(columnIndex int, subnetCount int, epoch primitives.Epoch) []enode.ID {
+func computeColumnIds(columnIndex int, subnetCount int, epoch primitives.Epoch) []enode.ID {
 	num := params.BeaconConfig().EpochsPerColumnSubnetSubscription
 	columnIds := make([]enode.ID, num)
 	for i := range num {
