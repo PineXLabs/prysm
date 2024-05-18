@@ -36,6 +36,7 @@ func CreateLightClientFinalityUpdate(update *ethpbv2.LightClientUpdate) *ethpbv2
 		FinalityBranch:  update.FinalityBranch,
 		SyncAggregate:   update.SyncAggregate,
 		SignatureSlot:   update.SignatureSlot,
+		BlobCommitments: update.BlobCommitments,
 	}
 }
 
@@ -49,9 +50,10 @@ func CreateLightClientFinalityUpdate(update *ethpbv2.LightClientUpdate) *ethpbv2
 //	)
 func CreateLightClientOptimisticUpdate(update *ethpbv2.LightClientUpdate) *ethpbv2.LightClientOptimisticUpdate {
 	return &ethpbv2.LightClientOptimisticUpdate{
-		AttestedHeader: update.AttestedHeader,
-		SyncAggregate:  update.SyncAggregate,
-		SignatureSlot:  update.SignatureSlot,
+		AttestedHeader:  update.AttestedHeader,
+		SyncAggregate:   update.SyncAggregate,
+		SignatureSlot:   update.SignatureSlot,
+		BlobCommitments: update.BlobCommitments,
 	}
 }
 
@@ -148,6 +150,10 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 		SignatureSlot:  block.Block().Slot(),
 	}
 
+	if comms, err := block.Block().Body().BlobKzgCommitments(); err == nil {
+		result.BlobCommitments = comms
+	}
+
 	return result, nil
 }
 
@@ -223,6 +229,10 @@ func NewLightClientFinalityUpdateFromBeaconState(
 
 	result.FinalizedHeader = finalizedHeader
 	result.FinalityBranch = finalityBranch
+
+	if comms, err := block.Block().Body().BlobKzgCommitments(); err == nil {
+		result.BlobCommitments = comms
+	}
 	return result, nil
 }
 
@@ -233,13 +243,15 @@ func NewLightClientUpdateFromFinalityUpdate(update *ethpbv2.LightClientFinalityU
 		FinalityBranch:  update.FinalityBranch,
 		SyncAggregate:   update.SyncAggregate,
 		SignatureSlot:   update.SignatureSlot,
+		BlobCommitments: update.BlobCommitments,
 	}
 }
 
 func NewLightClientUpdateFromOptimisticUpdate(update *ethpbv2.LightClientOptimisticUpdate) *ethpbv2.LightClientUpdate {
 	return &ethpbv2.LightClientUpdate{
-		AttestedHeader: update.AttestedHeader,
-		SyncAggregate:  update.SyncAggregate,
-		SignatureSlot:  update.SignatureSlot,
+		AttestedHeader:  update.AttestedHeader,
+		SyncAggregate:   update.SyncAggregate,
+		SignatureSlot:   update.SignatureSlot,
+		BlobCommitments: update.BlobCommitments,
 	}
 }
