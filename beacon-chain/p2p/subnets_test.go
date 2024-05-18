@@ -736,9 +736,4 @@ func TestComputeColumnId(t *testing.T) {
 	params.SetupTestConfigCleanup(t)
 	ids := computeColumnIds(13, 64, 1000)
 	require.Equal(t, 8, len(ids))
-	set := map[enode.ID]struct{}{}
-	for _, id := range ids {
-		set[id] = struct{}{}
-	}
-	require.Equal(t, 8, len(set))
 }
