@@ -44,3 +44,5 @@ tmp
 
 # spectest coverage reports
 report.txt
+
+.vscode/*
