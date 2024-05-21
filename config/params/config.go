@@ -254,6 +254,8 @@ type BeaconChainConfig struct {
 	BeaconColumnSubnetCustodyRequired          uint64 `yaml:"BEACON_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"`           // BeaconColumnSubnetCustodyRequired specifies the minimum subnet that a beacon node should connected to.
 	ValidatorColumnSubnetCustodyRequired       uint64 `yaml:"VALIDATOR_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"`        // ValidatorColumnSubnetCustodyRequired specifies the extra number of subnets that a validator node should connected to.
 	ColumnCount                                uint64 `yaml:"COLUMN_COUNT" spec:"true"`                                    // ColumnCount specifies the total column count.
+	ColumnSubnetPrefixBits                     uint64 `yaml:"COLUMN_SUBNET_PREFIX_BITS" spec:"true"`                       // ColumnSubnetCountPrefixBits is the number of bits used by EpochsPerColumnSubnetSubscription
+	ColumnSubnetCountLog2                      uint64 `yaml:"COLUMN_SUBNET_COUNT_LOG2" spec:"true"`                        // ColumnSubnetCountLog2 is log2(COLUMN_SUBNET_COUNT)
 }
 
 // InitializeForkSchedule initializes the schedules forks baked into the config.

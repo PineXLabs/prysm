@@ -1,11 +1,11 @@
 package helpers
 
 import (
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/holiman/uint256"
+	"github.com/prysmaticlabs/prysm/v5/config/params"
 )
 
 type distIdx struct {
@@ -17,9 +17,12 @@ type distIdx struct {
 // the subnet id are distributed evenly in the uint256 id space
 func SelectNearestColumnSubnets(nodeID enode.ID, subnetCount int, colRequired int) []int {
 	nodeIDUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
-	log2ColSubnetCount := math.Log2(float64(subnetCount))
-	// we need to make sure that none of the sunbet id is zero or max(uint256)
-	minimumSubnetIdDistance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetCount)+1), nil)
+	log2ColSubnetCount := params.BeaconConfig().ColumnSubnetCountLog2
+	prefixBits := params.BeaconConfig().ColumnSubnetPrefixBits
+
+	// make sure that none of the sunbet id is zero
+	minimumSubnetIdDistance := big.NewInt(1)
+	minimumSubnetIdDistance.Lsh(minimumSubnetIdDistance, 256-uint(log2ColSubnetCount+prefixBits)-1)
 	subnetIdDistance := uint256.NewInt(0)
 	subnetIdDistance.SetFromBig(minimumSubnetIdDistance)
 
@@ -41,12 +44,13 @@ func SelectNearestColumnSubnets(nodeID enode.ID, subnetCount int, colRequired in
 }
 
 func ColumnId(subnetCount int, columnIndex int) *uint256.Int {
-	log2ColSubnetCount := math.Log2(float64(subnetCount))
-	// we need to make sure that none of the sunbet id is zero or max(uint256)
-	minimumSubnetIdDistance := big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256-int64(log2ColSubnetCount)+1), nil)
+	log2ColSubnetCount := params.BeaconConfig().ColumnSubnetCountLog2
+	prefixBits := params.BeaconConfig().ColumnSubnetPrefixBits
+	minimumSubnetIdDistance := big.NewInt(1)
+	minimumSubnetIdDistance.Lsh(minimumSubnetIdDistance, 256-uint(log2ColSubnetCount+prefixBits)-1)
 	subnetIdDistance := uint256.NewInt(0)
 	subnetIdDistance.SetFromBig(minimumSubnetIdDistance)
-	colId := uint256.NewInt(uint64(columnIndex))
+	colId := uint256.NewInt(uint64(columnIndex) + 1)
 	colId.Mul(colId, subnetIdDistance)
 	return colId
 }

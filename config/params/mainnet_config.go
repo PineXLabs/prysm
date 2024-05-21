@@ -295,6 +295,8 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	BeaconColumnSubnetCustodyRequired:          8,
 	ValidatorColumnSubnetCustodyRequired:       4,
 	ColumnCount:                                128,
+	ColumnSubnetPrefixBits:                     3,
+	ColumnSubnetCountLog2:                      6,
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name

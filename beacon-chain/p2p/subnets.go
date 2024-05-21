@@ -282,8 +282,8 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, extraRequired int) ([]uint64, error) {
 	subs := []uint64{}
 	subnetCount := params.BeaconConfig().ColumnSubnetCount
-	nodeOffset := computeOffsetForColumnSubnets(nodeID)
-	subnets := shuffledColumnIdsByNodeOffset(nodeOffset, epoch)
+	nodeIDPrefix := computePrefixForColumnSubnets(nodeID)
+	subnets := shuffledColumnIdsByNodeOffset(nodeIDPrefix, epoch)
 	subnetRequired := int(params.BeaconConfig().BeaconColumnSubnetCustodyRequired)
 	subnetRequired += extraRequired
 	colIdxs := helpers.SelectNearestColumnSubnets(nodeID, int(subnetCount), subnetRequired)
@@ -378,6 +378,14 @@ func computeOffsetForColumnSubnets(nodeID enode.ID) uint64 {
 	num := uint256.NewInt(0).SetBytes(nodeID.Bytes())
 	nodeOffset := num.Mod(num, uint256.NewInt(params.BeaconConfig().EpochsPerColumnSubnetSubscription)).Uint64()
 	return nodeOffset
+}
+
+func computePrefixForColumnSubnets(nodeID enode.ID) uint64 {
+	num := uint256.NewInt(0).SetBytes(nodeID.Bytes())
+	remBits := params.BeaconConfig().NodeIdBits - params.BeaconConfig().ColumnSubnetPrefixBits
+	// Number of bits left will be representable by a uint64 value.
+	nodeIdPrefix := num.Rsh(num, uint(remBits)).Uint64()
+	return nodeIdPrefix
 }
 
 // Initializes a bitvector of attestation subnets beacon nodes is subscribed to
