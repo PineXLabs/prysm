@@ -52,7 +52,12 @@ func (s *Service) RefreshENR() {
 		log.WithError(err).Error("Could not initialize persistent subnets")
 		return
 	}
-
+	if currEpoch >= params.BeaconConfig().DenebForkEpoch {
+		if err := initializePersistentColumnSubnets(s.dv5Listener.LocalNode().ID(), currEpoch); err != nil {
+			log.WithError(err).Error("Could not initialize persistent column subnets")
+			return
+		}
+	}
 	bitV := bitfield.NewBitvector64()
 	committees := cache.SubnetIDs.GetAllSubnets()
 	for _, idx := range committees {
@@ -66,6 +71,7 @@ func (s *Service) RefreshENR() {
 
 	// Compare current epoch with our fork epochs
 	altairForkEpoch := params.BeaconConfig().AltairForkEpoch
+	denebForkEpoch := params.BeaconConfig().DenebForkEpoch
 	switch {
 	case currEpoch < altairForkEpoch:
 		// Phase 0 behaviour.
@@ -74,7 +80,8 @@ func (s *Service) RefreshENR() {
 			return
 		}
 		s.updateSubnetRecordWithMetadata(bitV)
-	default:
+	case currEpoch < denebForkEpoch && currEpoch >= altairForkEpoch:
+
 		// Retrieve sync subnets from application level
 		// cache.
 		bitS := bitfield.Bitvector4{byte(0x00)}
@@ -93,6 +100,33 @@ func (s *Service) RefreshENR() {
 			return
 		}
 		s.updateSubnetRecordWithMetadataV2(bitV, bitS)
+	default:
+		bitS := bitfield.Bitvector4{byte(0x00)}
+		committees = cache.SyncSubnetIDs.GetAllSubnets(currEpoch)
+		for _, idx := range committees {
+			bitS.SetBitAt(idx, true)
+		}
+		currentBitS, err := syncBitvector(s.dv5Listener.Self().Record())
+		if err != nil {
+			log.WithError(err).Error("Could not retrieve sync bitfield")
+			return
+		}
+		bitC := bitfield.NewBitvector64()
+		colSubnets := cache.SubnetIDs.GetAllColumnSubnets()
+		for _, idx := range colSubnets {
+			bitC.SetBitAt(idx, true)
+		}
+		currentBitC, err := colBitvector(s.dv5Listener.Self().Record())
+		if err != nil {
+			log.WithError(err).Error("Could not retrieve column bitfield")
+			return
+		}
+		if bytes.Equal(bitV, currentBitV) && bytes.Equal(bitS, currentBitS) &&
+			bytes.Equal(bitC, currentBitC) && s.Metadata().Version() == version.Altair {
+			// return early if bitfields haven't changed
+			return
+		}
+		s.updateSubnetRecordWithMetadataV3(bitV, bitS, bitC)
 	}
 	// ping all peers to inform them of new metadata
 	s.pingPeers()
@@ -233,6 +267,7 @@ func (s *Service) createLocalNode(
 
 	localNode = initializeAttSubnets(localNode)
 	localNode = initializeSyncCommSubnets(localNode)
+	localNode = initializeColSubnets(localNode)
 
 	if s.cfg != nil && s.cfg.HostAddress != "" {
 		hostIP := net.ParseIP(s.cfg.HostAddress)

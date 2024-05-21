@@ -390,6 +390,8 @@ func (s *Server) SubmitBeaconCommitteeSubscription(w http.ResponseWriter, r *htt
 		if sub.IsAggregator {
 			cache.SubnetIDs.AddAggregatorSubnetID(sub.Slot, subnet)
 		}
+		extraColumnSubnetDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot)) * 8 * time.Second
+		cache.SubnetIDs.AddExtraRequiredSubnetRecord(sub.ValidatorIndex, extraColumnSubnetDuration)
 	}
 }
 

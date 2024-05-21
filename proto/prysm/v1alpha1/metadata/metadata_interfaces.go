@@ -17,5 +17,6 @@ type Metadata interface {
 	ssz.Unmarshaler
 	MetadataObjV0() *pb.MetaDataV0
 	MetadataObjV1() *pb.MetaDataV1
+	MetadataObjV2() *pb.MetaDataV2
 	Version() int
 }
