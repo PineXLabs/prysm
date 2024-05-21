@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/helpers"
 	"github.com/prysmaticlabs/prysm/v5/cmd/beacon-chain/flags"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	ecdsaprysm "github.com/prysmaticlabs/prysm/v5/crypto/ecdsa"
@@ -685,7 +686,7 @@ func TestColumnSubnetComputation(t *testing.T) {
 	assert.NoError(t, err)
 	localNode := enode.NewLocalNode(db, convertedKey)
 
-	retrievedSubnets, err := computeSubscribedColumnSubnets(localNode.ID(), 1000, 8)
+	retrievedSubnets, err := helpers.ComputeSubscribedColumnSubnets(localNode.ID(), 1000, 8)
 	assert.NoError(t, err)
 	assert.Equal(t, len(retrievedSubnets), 16)
 }
@@ -734,6 +735,6 @@ func TestInitializePersistentColumnSubnets(t *testing.T) {
 
 func TestComputeColumnId(t *testing.T) {
 	params.SetupTestConfigCleanup(t)
-	ids := computeColumnIds(13, 64, 1000)
+	ids := helpers.ComputeColumnIds(13, 64, 1000)
 	require.Equal(t, 8, len(ids))
 }

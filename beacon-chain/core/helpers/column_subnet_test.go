@@ -37,7 +37,7 @@ func TestSelectNearestColumnSunbet(t *testing.T) {
 		subnetIdDist := uint256.NewInt(0)
 		subnetIdDist.SetFromBig(distance)
 
-		selected := SelectNearestColumnSubnets(nid, 64, 8)
+		selected := selectNearestColumnSubnets(nid, 64, 8)
 		require.Equal(t, 8, len(selected))
 		smap := make(map[int]struct{})
 		for _, s := range selected {
