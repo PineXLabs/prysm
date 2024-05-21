@@ -48,6 +48,10 @@ tmp
 # spectest coverage reports
 report.txt
 
+<<<<<<< HEAD
 # UML
 UML
 .vscode/*
+=======
+.vscode/*
+>>>>>>> 22f0de3e6... test: change lightclient update test case
