@@ -34,12 +34,12 @@ func (l *testlc) setupTest() *testlc {
 
 	slot := primitives.Slot(params.BeaconConfig().AltairForkEpoch * primitives.Epoch(params.BeaconConfig().SlotsPerEpoch)).Add(1)
 
-	attestedState, err := util.NewBeaconStateCapella()
+	attestedState, err := util.NewBeaconStateDeneb()
 	require.NoError(l.t, err)
 	err = attestedState.SetSlot(slot)
 	require.NoError(l.t, err)
 
-	parent := util.NewBeaconBlockCapella()
+	parent := util.NewBeaconBlockDeneb()
 	parent.Block.Slot = slot
 
 	signedParent, err := blocks.NewSignedBeaconBlock(parent)
@@ -59,17 +59,15 @@ func (l *testlc) setupTest() *testlc {
 	signedParent, err = blocks.NewSignedBeaconBlock(parent)
 	require.NoError(l.t, err)
 
-	state, err := util.NewBeaconStateCapella()
+	state, err := util.NewBeaconStateDeneb()
 	require.NoError(l.t, err)
 	err = state.SetSlot(slot)
 	require.NoError(l.t, err)
 
 	parentRoot, err := signedParent.Block().HashTreeRoot()
 	require.NoError(l.t, err)
-
-	block := util.NewBeaconBlockCapella()
-	block.Block.Slot = slot
-	block.Block.ParentRoot = parentRoot[:]
+	bl, _ := util.GenerateTestDenebBlockWithSidecar(l.t, parentRoot, slot, 4)
+	block, _ := bl.PbDenebBlock()
 
 	for i := uint64(0); i < params.BeaconConfig().MinSyncCommitteeParticipants; i++ {
 		block.Block.Body.SyncAggregate.SyncCommitteeBits.SetBitAt(i, true)
@@ -111,6 +109,13 @@ func (l *testlc) checkAttestedHeader(update *ethpbv2.LightClientUpdate) {
 	require.DeepSSZEqual(l.t, attestedStateRoot[:], update.AttestedHeader.StateRoot, "Attested header state root is not equal")
 }
 
+func (l *testlc) checkKZGCommitments(update *ethpbv2.LightClientUpdate) {
+	require.NotNil(l.t, update.BlobCommitments)
+	comms, err := l.block.Block().Body().BlobKzgCommitments()
+	require.NoError(l.t, err)
+	require.DeepEqual(l.t, comms, update.BlobCommitments)
+}
+
 func (l *testlc) checkSyncAggregate(update *ethpbv2.LightClientUpdate) {
 	syncAggregate, err := l.block.Block().Body().SyncAggregate()
 	require.NoError(l.t, err)
@@ -129,6 +134,7 @@ func TestLightClient_NewLightClientOptimisticUpdateFromBeaconState(t *testing.T)
 
 	l.checkSyncAggregate(update)
 	l.checkAttestedHeader(update)
+	l.checkKZGCommitments(update)
 
 	require.Equal(t, (*v1.BeaconBlockHeader)(nil), update.FinalizedHeader, "Finalized header is not nil")
 	require.DeepSSZEqual(t, ([][]byte)(nil), update.FinalityBranch, "Finality branch is not nil")
@@ -145,6 +151,7 @@ func TestLightClient_NewLightClientFinalityUpdateFromBeaconState(t *testing.T) {
 
 	l.checkSyncAggregate(update)
 	l.checkAttestedHeader(update)
+	l.checkKZGCommitments(update)
 
 	zeroHash := params.BeaconConfig().ZeroHash[:]
 	require.NotNil(t, update.FinalizedHeader, "Finalized header is nil")
