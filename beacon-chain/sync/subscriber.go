@@ -585,8 +585,7 @@ func (s *Service) subscribeColSubnet(
 ) {
 	// do not subscribe if we have no peers in the same
 	// subnet
-	// TODO: dill/add column subnet message type
-	topic := p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.SyncCommitteeMessage{})]
+	topic := p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.ColumnSidecar{})]
 	subnetTopic := fmt.Sprintf(topic, digest, idx)
 	// check if subscription exists and if not subscribe the relevant subnet.
 	if _, exists := subscriptions[idx]; !exists {
