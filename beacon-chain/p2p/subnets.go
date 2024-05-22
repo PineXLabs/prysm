@@ -260,6 +260,16 @@ func initializePersistentColumnSubnets(id enode.ID, epoch primitives.Epoch) erro
 	return nil
 }
 
+func initializeFixPersistentColumnSubnets(id enode.ID) error {
+	_, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	if ok && expTime.After(time.Now()) {
+		return nil
+	}
+	subs := computeFixSubscribedColumnSubnets(id)
+	cache.SubnetIDs.AddPersistentColumnSubnets(subs, 0)
+	return nil
+}
+
 // Spec pseudocode definition:
 //
 // def compute_subscribed_subnets(node_id: NodeID, epoch: Epoch) -> Sequence[SubnetID]:
@@ -291,6 +301,19 @@ func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, ext
 		subs = append(subs, uint64(subnets[i]))
 	}
 	return subs, nil
+}
+
+func computeFixSubscribedColumnSubnets(nodeID enode.ID) []uint64 {
+	subs := []uint64{}
+	idUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
+	subnetCount := params.BeaconConfig().ColumnSubnetCount
+	offset := idUint256.Mod(idUint256, uint256.NewInt(subnetCount)).Uint64()
+	num := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
+	for i := range num {
+		subnetIndex := (offset + i) % subnetCount
+		subs = append(subs, subnetIndex)
+	}
+	return subs
 }
 
 func computeColumnIds(columnIndex int, subnetCount int, epoch primitives.Epoch) []enode.ID {

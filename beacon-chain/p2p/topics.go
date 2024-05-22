@@ -34,8 +34,6 @@ const (
 	GossipBlsToExecutionChangeMessage = "bls_to_execution_change"
 	// GossipBlobSidecarMessage is the name for the blob sidecar message type.
 	GossipBlobSidecarMessage = "blob_sidecar"
-	// GossipColumnSidecarMessage is the name for the column sidecar message type.
-	GossipColumnSidecarMessage = "column_sidecar"
 	// Topic Formats
 	//
 	// AttestationSubnetTopicFormat is the topic format for the attestation subnet.

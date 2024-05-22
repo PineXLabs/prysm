@@ -726,6 +726,26 @@ func TestInitializePersistentColumnSubnets(t *testing.T) {
 	assert.NoError(t, initializePersistentColumnSubnets(localNode.ID(), 10000))
 	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
 	assert.Equal(t, true, ok)
+	assert.Equal(t, 8, len(subs))
+	assert.Equal(t, true, expTime.After(time.Now()))
+}
+
+func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
+	cache.SubnetIDs.EmptyAllCaches()
+	defer cache.SubnetIDs.EmptyAllCaches()
+
+	db, err := enode.OpenDB("")
+	assert.NoError(t, err)
+	defer db.Close()
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	assert.NoError(t, err)
+	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+	assert.NoError(t, err)
+	localNode := enode.NewLocalNode(db, convertedKey)
+
+	assert.NoError(t, initializeFixPersistentColumnSubnets(localNode.ID()))
+	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	assert.Equal(t, true, ok)
 	// 4 column subnets by default
 	// TODO: use variable to define the const num
 	assert.Equal(t, 8, len(subs))
