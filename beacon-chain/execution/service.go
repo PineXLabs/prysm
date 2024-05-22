@@ -64,6 +64,8 @@ var (
 	logThreshold = 8
 	// period to log chainstart related information
 	logPeriod = 1 * time.Minute
+	// initCKP simulates an initial check point
+	initCKP = true
 )
 
 // ChainStartFetcher retrieves information pertaining to the chain start event
@@ -353,7 +355,7 @@ func (s *Service) initDepositCaches(ctx context.Context, ctrs []*ethpb.DepositCo
 		return err
 	}
 	rt := bytesutil.ToBytes32(chkPt.Root)
-	if rt != [32]byte{} {
+	if initCKP || rt != [32]byte{} {
 		fState := s.cfg.finalizedStateAtStartup
 		if fState == nil || fState.IsNil() {
 			return errors.Errorf("finalized state with root %#x is nil", rt)
@@ -378,6 +380,7 @@ func (s *Service) initDepositCaches(ctx context.Context, ctrs []*ethpb.DepositCo
 		if err = s.cfg.depositCache.PruneProofs(ctx, actualIndex); err != nil {
 			return errors.Wrap(err, "could not prune deposit proofs")
 		}
+		initCKP = false
 	}
 	validDepositsCount.Add(float64(currIndex))
 	// Only add pending deposits if the container slice length

@@ -350,7 +350,7 @@ func generateGenesis(ctx context.Context) (state.BeaconState, error) {
 		if err := genesisState.SetEth1Data(e1d); err != nil {
 			return nil, err
 		}
-		if err := genesisState.SetEth1DepositIndex(0); err != nil {
+		if err := genesisState.SetEth1DepositIndex(uint64(len(depositDataRoots))); err != nil {
 			return nil, err
 		}
 	}
