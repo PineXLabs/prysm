@@ -147,13 +147,22 @@ func (s *Service) registerSubscribers(epoch primitives.Epoch, digest [4]byte) {
 	//}
 
 	if epoch >= params.BeaconConfig().DenebForkEpoch {
-		s.subscribeStaticWithSubnets(
-			p2p.ColumnSubnetTopicFormat,
-			s.validateColumn,   /* validator */
-			s.columnSubscriber, /* message handler */
-			digest,
-			params.BeaconConfig().ColumnsidecarSubnetCount,
-		)
+		if flags.Get().SubscribeToAllSubnets {
+			s.subscribeStaticWithSubnets(
+				p2p.ColumnSubnetTopicFormat,
+				s.validateColumn,   /* validator */
+				s.columnSubscriber, /* message handler */
+				digest,
+				params.BeaconConfig().ColumnsidecarSubnetCount,
+			)
+		} else {
+			s.subscribeFixColumnSubnets(
+				p2p.ColumnSubnetTopicFormat,
+				s.validateColumn,
+				s.columnSubscriber, /* message handler */
+				digest,
+			)
+		}
 	}
 }
 
@@ -461,10 +470,10 @@ func (s *Service) subscribeDynamicWithSubnets(
 	}()
 }
 
-// subscribe to a dynamically changing list of subnets. This method expects a fmt compatible
+// subscribe to a fix list of subnets. This method expects a fmt compatible
 // string for the topic name and the list of subnets for subscribed topics that should be
 // maintained.
-func (s *Service) subscribeDynamicWithColumnSubnets(
+func (s *Service) subscribeFixColumnSubnets(
 	topicFormat string,
 	validate wrappedVal,
 	handle subHandler,
