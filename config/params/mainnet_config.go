@@ -292,7 +292,7 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ColumnSubnetCount:                          64,
 	EpochsPerColumnSubnetSubscription:          8,
 	EpochsPerValidatorColumnSubnetSubscription: 8,
-	BeaconColumnSubnetCustodyRequired:          8,
+	BeaconColumnSubnetCustodyRequired:          16,
 	ValidatorColumnSubnetCustodyRequired:       4,
 	ColumnCount:                                128,
 }
