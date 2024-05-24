@@ -1194,6 +1194,7 @@ func (b *BeaconNode) registerBuilderService(cliCtx *cli.Context) error {
 
 func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
 	opts := b.serviceFlagOpts.dasOpts
+
 	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(b.fetchP2P().Host()))
 	svc, err := das.NewService(b.ctx, opts...)
 	if err != nil {
