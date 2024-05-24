@@ -285,6 +285,9 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	AttestationSubnetPrefixBits:     6,
 	SubnetsPerNode:                  2,
 	NodeIdBits:                      256,
+
+	// 4 epoches
+	DhtDataTTL: uint64(12 * 32 * 4 * time.Second),
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name
