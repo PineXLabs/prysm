@@ -295,6 +295,8 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	BeaconColumnSubnetCustodyRequired:          16,
 	ValidatorColumnSubnetCustodyRequired:       4,
 	ColumnCount:                                128,
+	// 4 epoches
+	DhtDataTTL: uint64(12 * 32 * 4 * time.Second),
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name
