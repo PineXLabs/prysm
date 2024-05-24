@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -21,10 +20,8 @@ type subnetIDs struct {
 	persistentSubnets *cache.Cache
 	subnetsLock       sync.RWMutex
 
-	persistentColumnSubnets        *cache.Cache
-	persistentColumnSubnetsLock    sync.RWMutex
-	extraRequiredColumnSubnets     *cache.Cache
-	extraRequiredColumnSubnetsLock sync.RWMutex
+	persistentColumnSubnets     *cache.Cache
+	persistentColumnSubnetsLock sync.RWMutex
 }
 
 // SubnetIDs for attester and aggregator.
@@ -45,15 +42,12 @@ func newSubnetIDs() *subnetIDs {
 	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
 	subLength := epochDuration * time.Duration(params.BeaconConfig().EpochsPerRandomSubnetSubscription)
 	persistentCache := cache.New(subLength*time.Second, epochDuration*time.Second)
-
-	colSubscirbeTime := time.Duration(params.BeaconConfig().EpochsPerColumnSubnetSubscription)
-	persistentColumnSubnets := cache.New(colSubscirbeTime*epochDuration*time.Second, epochDuration*time.Second)
-	extraRequiredColumnSubnets := cache.New(colSubscirbeTime*epochDuration*time.Second, epochDuration*time.Second)
+	// no expiration
+	persistentColumnSubnets := cache.New(-1, -1)
 	return &subnetIDs{attester: attesterCache,
-		aggregator:                 aggregatorCache,
-		persistentSubnets:          persistentCache,
-		persistentColumnSubnets:    persistentColumnSubnets,
-		extraRequiredColumnSubnets: extraRequiredColumnSubnets,
+		aggregator:              aggregatorCache,
+		persistentSubnets:       persistentCache,
+		persistentColumnSubnets: persistentColumnSubnets,
 	}
 }
 
@@ -95,21 +89,6 @@ func (s *subnetIDs) AddPersistentColumnSubnets(subnetIDs []uint64, duration time
 	defer s.persistentColumnSubnetsLock.Unlock()
 
 	s.persistentColumnSubnets.Set(columnSubnetKey, subnetIDs, duration)
-}
-
-func (s *subnetIDs) AddExtraRequiredSubnetRecord(validatorIndex primitives.ValidatorIndex, duration time.Duration) {
-	s.extraRequiredColumnSubnetsLock.Lock()
-	defer s.extraRequiredColumnSubnetsLock.Unlock()
-	key := fmt.Sprintf("%s_%d", extraColumRequiredKey, validatorIndex)
-	s.extraRequiredColumnSubnets.Set(key, validatorIndex, duration)
-}
-
-func (s *subnetIDs) GetExtraRequiredColumns() int {
-	s.extraRequiredColumnSubnetsLock.Lock()
-	defer s.extraRequiredColumnSubnetsLock.Unlock()
-	s.extraRequiredColumnSubnets.DeleteExpired()
-
-	return s.extraRequiredColumnSubnets.ItemCount()
 }
 
 // AddAttesterSubnetID adds the subnet index for subscribing subnet for the attester of a given slot.

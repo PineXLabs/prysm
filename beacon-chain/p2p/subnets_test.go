@@ -675,21 +675,6 @@ func TestSubnetComputation(t *testing.T) {
 	assert.Equal(t, retrievedSubnets[0]+1, retrievedSubnets[1])
 }
 
-func TestColumnSubnetComputation(t *testing.T) {
-	db, err := enode.OpenDB("")
-	assert.NoError(t, err)
-	defer db.Close()
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	assert.NoError(t, err)
-	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
-	assert.NoError(t, err)
-	localNode := enode.NewLocalNode(db, convertedKey)
-
-	retrievedSubnets, err := computeSubscribedColumnSubnets(localNode.ID(), 1000, 8)
-	assert.NoError(t, err)
-	assert.Equal(t, len(retrievedSubnets), 16)
-}
-
 func TestInitializePersistentSubnets(t *testing.T) {
 	cache.SubnetIDs.EmptyAllCaches()
 	defer cache.SubnetIDs.EmptyAllCaches()
@@ -710,26 +695,6 @@ func TestInitializePersistentSubnets(t *testing.T) {
 	assert.Equal(t, true, expTime.After(time.Now()))
 }
 
-func TestInitializePersistentColumnSubnets(t *testing.T) {
-	cache.SubnetIDs.EmptyAllCaches()
-	defer cache.SubnetIDs.EmptyAllCaches()
-
-	db, err := enode.OpenDB("")
-	assert.NoError(t, err)
-	defer db.Close()
-	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
-	assert.NoError(t, err)
-	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
-	assert.NoError(t, err)
-	localNode := enode.NewLocalNode(db, convertedKey)
-
-	assert.NoError(t, initializePersistentColumnSubnets(localNode.ID(), 10000))
-	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
-	assert.Equal(t, true, ok)
-	assert.Equal(t, 8, len(subs))
-	assert.Equal(t, true, expTime.After(time.Now()))
-}
-
 func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
 	cache.SubnetIDs.EmptyAllCaches()
 	defer cache.SubnetIDs.EmptyAllCaches()
@@ -744,16 +709,7 @@ func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
 	localNode := enode.NewLocalNode(db, convertedKey)
 
 	assert.NoError(t, initializeFixPersistentColumnSubnets(localNode.ID()))
-	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	subs, ok, _ := cache.SubnetIDs.GetPersistentColumnSubnets()
 	assert.Equal(t, true, ok)
-	// 4 column subnets by default
-	// TODO: use variable to define the const num
-	assert.Equal(t, 8, len(subs))
-	assert.Equal(t, true, expTime.After(time.Now()))
-}
-
-func TestComputeColumnId(t *testing.T) {
-	params.SetupTestConfigCleanup(t)
-	ids := computeColumnIds(13, 64, 1000)
-	require.Equal(t, 8, len(ids))
+	assert.Equal(t, 16, len(subs))
 }

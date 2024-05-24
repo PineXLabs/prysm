@@ -289,12 +289,9 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	NodeIdBits:                      256,
 
 	// dill related
-	ColumnSubnetCount:                          64,
-	EpochsPerColumnSubnetSubscription:          8,
-	EpochsPerValidatorColumnSubnetSubscription: 8,
-	BeaconColumnSubnetCustodyRequired:          16,
-	ValidatorColumnSubnetCustodyRequired:       4,
-	ColumnCount:                                128,
+	ColumnSubnetCount:                 64,
+	BeaconColumnSubnetCustodyRequired: 16,
+	ColumnCount:                       128,
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name
