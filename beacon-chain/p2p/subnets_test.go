@@ -493,6 +493,173 @@ func Test_SyncSubnets(t *testing.T) {
 	}
 }
 
+func Test_ColumnSubnets(t *testing.T) {
+	params.SetupTestConfigCleanup(t)
+	tests := []struct {
+		name        string
+		record      func(t *testing.T) *enr.Record
+		want        []uint64
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid record",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				localNode = initializeColSubnets(localNode)
+				return localNode.Node().Record()
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "too small subnet",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				entry := enr.WithEntry(colSubnetEnrKey, []byte{})
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want:        []uint64{},
+			wantErr:     true,
+			errContains: "invalid bitvector provided, it has a size of",
+		},
+		{
+			name: "too large subnet",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				entry := enr.WithEntry(colSubnetEnrKey, make([]byte, byteCount(int(colSubnetCount))+1))
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want:        []uint64{},
+			wantErr:     true,
+			errContains: "invalid bitvector provided, it has a size of",
+		},
+		{
+			name: "very large subnet",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				entry := enr.WithEntry(colSubnetEnrKey, make([]byte, byteCount(int(colSubnetCount))+100))
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want:        []uint64{},
+			wantErr:     true,
+			errContains: "invalid bitvector provided, it has a size of",
+		},
+		{
+			name: "single subnet",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				bitV := bitfield.NewBitvector64()
+				bitV.SetBitAt(0, true)
+				entry := enr.WithEntry(colSubnetEnrKey, bitV.Bytes())
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want:    []uint64{0},
+			wantErr: false,
+		},
+		{
+			name: "multiple subnets",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				bitV := bitfield.NewBitvector64()
+				for i := uint64(0); i < bitV.Len(); i++ {
+					// skip 2 subnets
+					if (i+1)%2 == 0 {
+						continue
+					}
+					bitV.SetBitAt(i, true)
+				}
+				bitV.SetBitAt(0, true)
+				entry := enr.WithEntry(colSubnetEnrKey, bitV.Bytes())
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want: []uint64{0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20,
+				22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48,
+				50, 52, 54, 56, 58, 60, 62},
+			wantErr: false,
+		},
+		{
+			name: "all subnets",
+			record: func(t *testing.T) *enr.Record {
+				db, err := enode.OpenDB("")
+				assert.NoError(t, err)
+				priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+				assert.NoError(t, err)
+				convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+				assert.NoError(t, err)
+				localNode := enode.NewLocalNode(db, convertedKey)
+				bitV := bitfield.NewBitvector64()
+				for i := uint64(0); i < bitV.Len(); i++ {
+					bitV.SetBitAt(i, true)
+				}
+				entry := enr.WithEntry(colSubnetEnrKey, bitV.Bytes())
+				localNode.Set(entry)
+				return localNode.Node().Record()
+			},
+			want: []uint64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+				21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
+				50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := colSubnets(tt.record(t))
+			if (err != nil) != tt.wantErr {
+				t.Errorf("colSubnets() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				assert.ErrorContains(t, tt.errContains, err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("colSubnets() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSubnetComputation(t *testing.T) {
 	db, err := enode.OpenDB("")
 	assert.NoError(t, err)
@@ -506,6 +673,21 @@ func TestSubnetComputation(t *testing.T) {
 	retrievedSubnets, err := computeSubscribedSubnets(localNode.ID(), 1000)
 	assert.NoError(t, err)
 	assert.Equal(t, retrievedSubnets[0]+1, retrievedSubnets[1])
+}
+
+func TestColumnSubnetComputation(t *testing.T) {
+	db, err := enode.OpenDB("")
+	assert.NoError(t, err)
+	defer db.Close()
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	assert.NoError(t, err)
+	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+	assert.NoError(t, err)
+	localNode := enode.NewLocalNode(db, convertedKey)
+
+	retrievedSubnets, err := computeSubscribedColumnSubnets(localNode.ID(), 1000, 8)
+	assert.NoError(t, err)
+	assert.Equal(t, len(retrievedSubnets), 16)
 }
 
 func TestInitializePersistentSubnets(t *testing.T) {
@@ -526,4 +708,52 @@ func TestInitializePersistentSubnets(t *testing.T) {
 	assert.Equal(t, true, ok)
 	assert.Equal(t, 2, len(subs))
 	assert.Equal(t, true, expTime.After(time.Now()))
+}
+
+func TestInitializePersistentColumnSubnets(t *testing.T) {
+	cache.SubnetIDs.EmptyAllCaches()
+	defer cache.SubnetIDs.EmptyAllCaches()
+
+	db, err := enode.OpenDB("")
+	assert.NoError(t, err)
+	defer db.Close()
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	assert.NoError(t, err)
+	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+	assert.NoError(t, err)
+	localNode := enode.NewLocalNode(db, convertedKey)
+
+	assert.NoError(t, initializePersistentColumnSubnets(localNode.ID(), 10000))
+	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	assert.Equal(t, true, ok)
+	assert.Equal(t, 8, len(subs))
+	assert.Equal(t, true, expTime.After(time.Now()))
+}
+
+func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
+	cache.SubnetIDs.EmptyAllCaches()
+	defer cache.SubnetIDs.EmptyAllCaches()
+
+	db, err := enode.OpenDB("")
+	assert.NoError(t, err)
+	defer db.Close()
+	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
+	assert.NoError(t, err)
+	convertedKey, err := ecdsaprysm.ConvertFromInterfacePrivKey(priv)
+	assert.NoError(t, err)
+	localNode := enode.NewLocalNode(db, convertedKey)
+
+	assert.NoError(t, initializeFixPersistentColumnSubnets(localNode.ID()))
+	subs, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
+	assert.Equal(t, true, ok)
+	// 4 column subnets by default
+	// TODO: use variable to define the const num
+	assert.Equal(t, 8, len(subs))
+	assert.Equal(t, true, expTime.After(time.Now()))
+}
+
+func TestComputeColumnId(t *testing.T) {
+	params.SetupTestConfigCleanup(t)
+	ids := computeColumnIds(13, 64, 1000)
+	require.Equal(t, 8, len(ids))
 }

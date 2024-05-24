@@ -76,7 +76,7 @@ func InitializeDataMaps() {
 			return wrapper.WrappedMetadataV1(&ethpb.MetaDataV1{})
 		},
 		bytesutil.ToBytes4(params.BeaconConfig().DenebForkVersion): func() metadata.Metadata {
-			return wrapper.WrappedMetadataV1(&ethpb.MetaDataV1{})
+			return wrapper.WrappedMetadataV2(&ethpb.MetaDataV2{})
 		},
 	}
 }

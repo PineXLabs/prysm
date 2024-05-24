@@ -11,6 +11,7 @@ type NetworkConfig struct {
 	ETH2Key                    string // ETH2Key is the ENR key of the Ethereum consensus object in an enr.
 	AttSubnetKey               string // AttSubnetKey is the ENR key of the subnet bitfield in the enr.
 	SyncCommsSubnetKey         string // SyncCommsSubnetKey is the ENR key of the sync committee subnet bitfield in the enr.
+	ColSubnetEnrKey            string // ColSubnetEnrKey is the ENR key of the column subnet bitfield in the enr.
 	MinimumPeersInSubnetSearch uint64 // PeersInSubnetSearch is the required amount of peers that we need to be able to lookup in a subnet search.
 
 	// Chain Network Config
