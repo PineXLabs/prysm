@@ -7,6 +7,7 @@ import (
 	dill_das "github.com/PineXLabs/das"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	errors "github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	lruwrpr "github.com/prysmaticlabs/prysm/v5/cache/lru"
@@ -92,9 +93,10 @@ func (p *csProvider) GetCommitment(root [32]byte, blobIndex uint64) (*dill_das.C
 }
 
 type Config struct {
-	host          host.Host
-	columnStorage *filesystem.ColumnStorage
-	dataStorePath string
+	host           host.Host
+	columnStorage  *filesystem.ColumnStorage
+	dataStorePath  string
+	bootstrapNodes []string
 }
 
 type Option func(cfg *Config)
@@ -117,6 +119,12 @@ func WithDataStorePath(path string) Option {
 	}
 }
 
+func WithBootStrapNodes(url []string) Option {
+	return func(cfg *Config) {
+		cfg.bootstrapNodes = url
+	}
+}
+
 type Service struct {
 	dasServer *dill_das.DASServer
 	ctx       context.Context
@@ -127,27 +135,44 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 	for _, opt := range opts {
 		opt(cfg)
 	}
+
 	p := &csProvider{
 		cs: cfg.columnStorage,
 		// we keep commitments of the last epoch
 		commitmentCache: lruwrpr.New(32 * 512 * 48),
 	}
-	dasServer, err := dill_das.NewDasServer(
-		ctx,
-		cfg.host,
+
+	infos := []peer.AddrInfo{}
+	for _, addr := range cfg.bootstrapNodes {
+		bsNode, err := peer.AddrInfoFromString(addr)
+		if err != nil {
+			return nil, err
+		}
+		infos = append(infos, *bsNode)
+	}
+	dillDasOpts := []dill_das.Option{
 		dill_das.WithColumnProvider(p),
 		dill_das.WithCommitmentProvider(p),
 		dill_das.WithEnableDasProvider(true),
 		dill_das.WithAllowPutNoCommitments(true),
 		dill_das.WithDataTTL(time.Duration(params.BeaconConfig().DhtDataTTL)),
-		dill_das.WithDatastorePath(cfg.dataStorePath),
 		dill_das.WithDasLogger(log),
+		dill_das.WithBootstrapNodes(infos),
+	}
+	if cfg.dataStorePath != "" {
+		dillDasOpts = append(dillDasOpts, dill_das.WithDatastorePath(cfg.dataStorePath))
+	}
+	dasServer, err := dill_das.NewDasServer(
+		ctx,
+		cfg.host,
+		dillDasOpts...,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Service{
+		ctx:       ctx,
 		dasServer: dasServer,
 	}, nil
 }
