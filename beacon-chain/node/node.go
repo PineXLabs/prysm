@@ -345,6 +345,11 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 		return errors.Wrap(err, "could not register deterministic genesis service")
 	}
 
+	log.Debugln("Registering Das Service")
+	if err := beacon.registerDasService(cliCtx); err != nil {
+		return errors.Wrap(err, "could not register das service")
+	}
+
 	log.Debugln("Registering Blockchain Service")
 	if err := beacon.registerBlockchainService(beacon.forkChoicer, synchronizer, beacon.initialSyncComplete); err != nil {
 		return errors.Wrap(err, "could not register blockchain service")
@@ -391,11 +396,6 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 		if err := beacon.registerPrometheusService(cliCtx); err != nil {
 			return errors.Wrap(err, "could not register prometheus service")
 		}
-	}
-
-	log.Debugln("Registering Das Service")
-	if err := beacon.registerDasService(cliCtx); err != nil {
-		return errors.Wrap(err, "could not register das service")
 	}
 
 	return nil
@@ -773,6 +773,11 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		return err
 	}
 
+	var dasService *das.Service
+	if err := b.services.FetchService(&dasService); err != nil {
+		return err
+	}
+
 	// skipcq: CRT-D0001
 	opts := append(
 		b.serviceFlagOpts.blockchainFlagOpts,
@@ -798,6 +803,7 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		blockchain.WithTrackedValidatorsCache(b.trackedValidatorsCache),
 		blockchain.WithPayloadIDCache(b.payloadIDCache),
 		blockchain.WithSyncChecker(b.syncChecker),
+		blockchain.WithColumnReceivedSubscribers([]blockchain.ColumnReceivedSubscriber{dasService}),
 	)
 
 	blockchainService, err := blockchain.NewService(b.ctx, opts...)
@@ -1187,11 +1193,6 @@ func (b *BeaconNode) registerBuilderService(cliCtx *cli.Context) error {
 }
 
 func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
-	var chainService *blockchain.Service
-	if err := b.services.FetchService(&chainService); err != nil {
-		return err
-	}
-
 	opts := b.serviceFlagOpts.dasOpts
 	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(b.fetchP2P().Host()))
 	svc, err := das.NewService(b.ctx, opts...)
