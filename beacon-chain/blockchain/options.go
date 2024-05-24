@@ -213,3 +213,10 @@ func WithSyncChecker(checker Checker) Option {
 		return nil
 	}
 }
+
+func WithColumnReceivedSubscribers(subs []ColumnReceivedSubscriber) Option {
+	return func(s *Service) error {
+		s.cfg.ColumnReceivedSubscribers = subs
+		return nil
+	}
+}
