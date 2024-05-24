@@ -27,6 +27,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache/depositcache"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache/depositsnapshot"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/das"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/kv"
@@ -82,6 +83,7 @@ type serviceFlagOpts struct {
 	blockchainFlagOpts     []blockchain.Option
 	executionChainFlagOpts []execution.Option
 	builderOpts            []builder.Option
+	dasOpts                []das.Option
 }
 
 // BeaconNode defines a struct that handles the services running a random beacon chain
@@ -389,6 +391,11 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 		if err := beacon.registerPrometheusService(cliCtx); err != nil {
 			return errors.Wrap(err, "could not register prometheus service")
 		}
+	}
+
+	log.Debugln("Registering Das Service")
+	if err := beacon.registerDasService(cliCtx); err != nil {
+		return errors.Wrap(err, "could not register das service")
 	}
 
 	return nil
@@ -1173,6 +1180,21 @@ func (b *BeaconNode) registerBuilderService(cliCtx *cli.Context) error {
 		opts = append(opts, builder.WithRegistrationCache())
 	}
 	svc, err := builder.NewService(b.ctx, opts...)
+	if err != nil {
+		return err
+	}
+	return b.services.RegisterService(svc)
+}
+
+func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
+	var chainService *blockchain.Service
+	if err := b.services.FetchService(&chainService); err != nil {
+		return err
+	}
+
+	opts := b.serviceFlagOpts.dasOpts
+	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(b.fetchP2P().Host()))
+	svc, err := das.NewService(b.ctx, opts...)
 	if err != nil {
 		return err
 	}
