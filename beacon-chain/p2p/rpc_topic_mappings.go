@@ -92,6 +92,7 @@ const (
 	RPCMetaDataTopicV2 = protocolPrefix + MetadataMessageName + SchemaVersionV2
 
 	// V3 RPC Topics
+	// RPCMetaDataTopicV3 defines the v3 topic for the metadata rpc method.
 	RPCMetaDataTopicV3 = protocolPrefix + MetadataMessageName + SchemaVersionV3
 )
 
@@ -117,6 +118,7 @@ var RPCTopicMappings = map[string]interface{}{
 	// RPC Metadata Message
 	RPCMetaDataTopicV1: new(interface{}),
 	RPCMetaDataTopicV2: new(interface{}),
+	RPCMetaDataTopicV3: new(interface{}),
 	// BlobSidecarsByRange v1 Message
 	RPCBlobSidecarsByRangeTopicV1: new(pb.BlobSidecarsByRangeRequest),
 	// BlobSidecarsByRoot v1 Message

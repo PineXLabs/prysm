@@ -17,7 +17,7 @@ const (
 	// GossipColumnSidecarMessage is the name for the blob colum sidecar message type. It is
 	// specially extracted so as to determine the correct message type from a column
 	// subnet.
-	GossipColumnSidecarMessage = "colum_sidecar"
+	GossipColumnSidecarMessage = "column_sidecar"
 	// GossipBlockMessage is the name for the block message type.
 	GossipBlockMessage = "beacon_block"
 	// GossipExitMessage is the name for the voluntary exit message type.
