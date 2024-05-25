@@ -28,7 +28,7 @@ import (
 var attestationSubnetCount = params.BeaconConfig().AttestationSubnetCount
 var syncCommsSubnetCount = params.BeaconConfig().SyncCommitteeSubnetCount
 
-var colSubnetCount uint64 = params.BeaconConfig().ColumnSubnetCount
+var colSubnetCount uint64 = params.BeaconConfig().ColumnsidecarSubnetCount
 
 var attSubnetEnrKey = params.BeaconNetworkConfig().AttSubnetKey
 var syncCommsSubnetEnrKey = params.BeaconNetworkConfig().SyncCommsSubnetKey
@@ -245,22 +245,7 @@ func initializePersistentSubnets(id enode.ID, epoch primitives.Epoch) error {
 	return nil
 }
 
-func initializePersistentColumnSubnets(id enode.ID, epoch primitives.Epoch) error {
-	_, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
-	if ok && expTime.After(time.Now()) {
-		return nil
-	}
-	extraRequired := cache.SubnetIDs.GetExtraRequiredColumns() * int(params.BeaconConfig().ValidatorColumnSubnetCustodyRequired)
-	subs, err := computeSubscribedColumnSubnets(id, epoch, extraRequired)
-	if err != nil {
-		return err
-	}
-	newExpTime := computeColumnSubnetSubscriptionExpirationTime(id, epoch)
-	cache.SubnetIDs.AddPersistentColumnSubnets(subs, newExpTime)
-	return nil
-}
-
-func initializeFixPersistentColumnSubnets(id enode.ID) error {
+func initializeFixedPersistentColumnSubnets(id enode.ID) error {
 	_, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
 	if ok && expTime.After(time.Now()) {
 		return nil
@@ -289,24 +274,10 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 	return subs, nil
 }
 
-func computeSubscribedColumnSubnets(nodeID enode.ID, epoch primitives.Epoch, extraRequired int) ([]uint64, error) {
-	subs := []uint64{}
-	subnetCount := params.BeaconConfig().ColumnSubnetCount
-	nodeOffset := computeOffsetForColumnSubnets(nodeID)
-	subnets := shuffledColumnIdsByNodeOffset(nodeOffset, epoch)
-	subnetRequired := int(params.BeaconConfig().BeaconColumnSubnetCustodyRequired)
-	subnetRequired += extraRequired
-	colIdxs := helpers.SelectNearestColumnSubnets(nodeID, int(subnetCount), subnetRequired)
-	for _, i := range colIdxs {
-		subs = append(subs, uint64(subnets[i]))
-	}
-	return subs, nil
-}
-
 func computeFixSubscribedColumnSubnets(nodeID enode.ID) []uint64 {
 	subs := []uint64{}
 	idUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
-	subnetCount := params.BeaconConfig().ColumnSubnetCount
+	subnetCount := params.BeaconConfig().ColumnsidecarSubnetCount
 	offset := idUint256.Mod(idUint256, uint256.NewInt(subnetCount)).Uint64()
 	num := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
 	for i := range num {
@@ -314,33 +285,6 @@ func computeFixSubscribedColumnSubnets(nodeID enode.ID) []uint64 {
 		subs = append(subs, subnetIndex)
 	}
 	return subs
-}
-
-func computeColumnIds(columnIndex int, subnetCount int, epoch primitives.Epoch) []enode.ID {
-	num := params.BeaconConfig().EpochsPerColumnSubnetSubscription
-	columnIds := make([]enode.ID, 0, num)
-	for i := range num {
-		subnets := shuffledColumnIdsByNodeOffset(i, epoch)
-		for idx, sub := range subnets {
-			if columnIndex == int(sub) {
-				id := helpers.ColumnId(subnetCount, idx)
-				columnIds = append(columnIds, id.Bytes32())
-			}
-		}
-	}
-	return columnIds
-}
-
-func shuffledColumnIdsByNodeOffset(nodeOffset uint64, epoch primitives.Epoch) []primitives.ValidatorIndex {
-	seed := hash.Hash(bytesutil.Bytes8((uint64(epoch)/params.BeaconConfig().EpochsPerColumnSubnetSubscription + nodeOffset)))
-	subnetNumber := params.BeaconConfig().ColumnSubnetCount
-
-	subnets := make([]primitives.ValidatorIndex, subnetNumber)
-	for i := range subnets {
-		subnets[i] = primitives.ValidatorIndex(i)
-	}
-	helpers.ShuffleList(subnets, seed)
-	return subnets
 }
 
 //	Spec pseudocode definition:
@@ -377,15 +321,6 @@ func computeSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) 
 	return epochTime * time.Second
 }
 
-func computeColumnSubnetSubscriptionExpirationTime(nodeID enode.ID, epoch primitives.Epoch) time.Duration {
-	nodeOffset := computeOffsetForColumnSubnets(nodeID)
-	pastEpochs := (nodeOffset + uint64(epoch)) % params.BeaconConfig().EpochsPerColumnSubnetSubscription
-	remEpochs := params.BeaconConfig().EpochsPerColumnSubnetSubscription - pastEpochs
-	epochDuration := time.Duration(params.BeaconConfig().SlotsPerEpoch.Mul(params.BeaconConfig().SecondsPerSlot))
-	epochTime := time.Duration(remEpochs) * epochDuration
-	return epochTime * time.Second
-}
-
 func computeOffsetAndPrefix(nodeID enode.ID) (uint64, uint64) {
 	num := uint256.NewInt(0).SetBytes(nodeID.Bytes())
 	remBits := params.BeaconConfig().NodeIdBits - params.BeaconConfig().AttestationSubnetPrefixBits
@@ -395,12 +330,6 @@ func computeOffsetAndPrefix(nodeID enode.ID) (uint64, uint64) {
 	num = uint256.NewInt(0).SetBytes(nodeID.Bytes())
 	nodeOffset := num.Mod(num, uint256.NewInt(params.BeaconConfig().EpochsPerSubnetSubscription)).Uint64()
 	return nodeOffset, nodeIdPrefix
-}
-
-func computeOffsetForColumnSubnets(nodeID enode.ID) uint64 {
-	num := uint256.NewInt(0).SetBytes(nodeID.Bytes())
-	nodeOffset := num.Mod(num, uint256.NewInt(params.BeaconConfig().EpochsPerColumnSubnetSubscription)).Uint64()
-	return nodeOffset
 }
 
 // Initializes a bitvector of attestation subnets beacon nodes is subscribed to
