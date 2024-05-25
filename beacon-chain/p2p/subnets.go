@@ -28,7 +28,7 @@ import (
 var attestationSubnetCount = params.BeaconConfig().AttestationSubnetCount
 var syncCommsSubnetCount = params.BeaconConfig().SyncCommitteeSubnetCount
 
-var colSubnetCount uint64 = params.BeaconConfig().ColumnSubnetCount
+var colSubnetCount uint64 = params.BeaconConfig().ColumnsidecarSubnetCount
 
 var attSubnetEnrKey = params.BeaconNetworkConfig().AttSubnetKey
 var syncCommsSubnetEnrKey = params.BeaconNetworkConfig().SyncCommsSubnetKey
@@ -245,7 +245,7 @@ func initializePersistentSubnets(id enode.ID, epoch primitives.Epoch) error {
 	return nil
 }
 
-func initializeFixPersistentColumnSubnets(id enode.ID) error {
+func initializeFixedPersistentColumnSubnets(id enode.ID) error {
 	_, ok, expTime := cache.SubnetIDs.GetPersistentColumnSubnets()
 	if ok && expTime.After(time.Now()) {
 		return nil
@@ -277,7 +277,7 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 func computeFixSubscribedColumnSubnets(nodeID enode.ID) []uint64 {
 	subs := []uint64{}
 	idUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
-	subnetCount := params.BeaconConfig().ColumnSubnetCount
+	subnetCount := params.BeaconConfig().ColumnsidecarSubnetCount
 	offset := idUint256.Mod(idUint256, uint256.NewInt(subnetCount)).Uint64()
 	num := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
 	for i := range num {

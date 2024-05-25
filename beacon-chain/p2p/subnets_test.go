@@ -695,7 +695,7 @@ func TestInitializePersistentSubnets(t *testing.T) {
 	assert.Equal(t, true, expTime.After(time.Now()))
 }
 
-func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
+func TestInitializeFixedPersistentColumnSubnets(t *testing.T) {
 	cache.SubnetIDs.EmptyAllCaches()
 	defer cache.SubnetIDs.EmptyAllCaches()
 
@@ -708,7 +708,7 @@ func TestInitializeFixPersistentColumnSubnets(t *testing.T) {
 	assert.NoError(t, err)
 	localNode := enode.NewLocalNode(db, convertedKey)
 
-	assert.NoError(t, initializeFixPersistentColumnSubnets(localNode.ID()))
+	assert.NoError(t, initializeFixedPersistentColumnSubnets(localNode.ID()))
 	subs, ok, _ := cache.SubnetIDs.GetPersistentColumnSubnets()
 	assert.Equal(t, true, ok)
 	assert.Equal(t, 16, len(subs))

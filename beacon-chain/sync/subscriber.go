@@ -490,7 +490,7 @@ func (s *Service) subscribeFixColumnSubnets(
 		panic(fmt.Sprintf("%s is not mapped to any message in GossipTopicMappings", topicFormat))
 	}
 
-	subscriptions := make(map[uint64]*pubsub.Subscription, params.BeaconConfig().ColumnSubnetCount)
+	subscriptions := make(map[uint64]*pubsub.Subscription, params.BeaconConfig().ColumnsidecarSubnetCount)
 	genesis := s.cfg.clock.GenesisTime()
 	ticker := slots.NewSlotTicker(genesis, params.BeaconConfig().SecondsPerSlot)
 

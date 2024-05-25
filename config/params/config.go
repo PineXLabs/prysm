@@ -248,7 +248,6 @@ type BeaconChainConfig struct {
 	NodeIdBits                      uint64          `yaml:"NODE_ID_BITS" spec:"true"`                       // NodeIdBits defines the bit length of a node id.
 
 	// Column related
-	ColumnSubnetCount                 uint64 `yaml:"COLUMN_SUBNET_COUNT" spec:"true"`                   // ColumnSubnetCount for column subnet count.
 	BeaconColumnSubnetCustodyRequired uint64 `yaml:"BEACON_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"` // BeaconColumnSubnetCustodyRequired specifies the minimum subnet that a beacon node should connected to.
 	ColumnCount                       uint64 `yaml:"COLUMN_COUNT" spec:"true"`                          // ColumnCount specifies the total column count.
 }

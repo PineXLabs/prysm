@@ -53,7 +53,7 @@ func (s *Service) RefreshENR() {
 		return
 	}
 	if currEpoch >= params.BeaconConfig().DenebForkEpoch {
-		if err := initializeFixPersistentColumnSubnets(s.dv5Listener.LocalNode().ID()); err != nil {
+		if err := initializeFixedPersistentColumnSubnets(s.dv5Listener.LocalNode().ID()); err != nil {
 			log.WithError(err).Error("Could not initialize persistent column subnets")
 			return
 		}
