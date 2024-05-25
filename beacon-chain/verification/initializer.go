@@ -57,6 +57,16 @@ func (ini *Initializer) NewBlobVerifier(b blocks.ROBlob, reqs []Requirement) *RO
 	}
 }
 
+// NewColumnVerifier creates a ColumnVerifier for a single blob, with the given set of requirements.
+func (ini *Initializer) NewColumnVerifier(c blocks.ROColumn, reqs []Requirement) *ROColumnVerifier {
+	return &ROColumnVerifier{
+		sharedResources:        ini.shared,
+		column:                 c,
+		results:                newResults(reqs...),
+		verifyColumnCommitment: kzg.VerifyColumns,
+	}
+}
+
 // InitializerWaiter provides an Initializer once all dependent resources are ready
 // via the WaitForInitializer method.
 type InitializerWaiter struct {

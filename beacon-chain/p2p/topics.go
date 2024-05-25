@@ -14,6 +14,10 @@ const (
 	// specially extracted so as to determine the correct message type from a sync committee
 	// subnet.
 	GossipSyncCommitteeMessage = "sync_committee"
+	// GossipColumnSidecarMessage is the name for the blob colum sidecar message type. It is
+	// specially extracted so as to determine the correct message type from a column
+	// subnet.
+	GossipColumnSidecarMessage = "colum_sidecar"
 	// GossipBlockMessage is the name for the block message type.
 	GossipBlockMessage = "beacon_block"
 	// GossipExitMessage is the name for the voluntary exit message type.
@@ -30,8 +34,6 @@ const (
 	GossipBlsToExecutionChangeMessage = "bls_to_execution_change"
 	// GossipBlobSidecarMessage is the name for the blob sidecar message type.
 	GossipBlobSidecarMessage = "blob_sidecar"
-	// GossipColumnSidecarMessage is the name for the column sidecar message type.
-	GossipColumnSidecarMessage = "column_sidecar"
 	// Topic Formats
 	//
 	// AttestationSubnetTopicFormat is the topic format for the attestation subnet.

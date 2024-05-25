@@ -16,6 +16,9 @@ const SchemaVersionV1 = "/1"
 // SchemaVersionV2 specifies the next schema version for our rpc protocol ID.
 const SchemaVersionV2 = "/2"
 
+// SchemaVersionV3 specifies the next schema version for our rpc protocol ID.
+const SchemaVersionV3 = "/3"
+
 // Specifies the protocol prefix for all our Req/Resp topics.
 const protocolPrefix = "/eth2/beacon_chain/req"
 
@@ -43,6 +46,12 @@ const BlobSidecarsByRangeName = "/blob_sidecars_by_range"
 // BlobSidecarsByRootName is the name for the BlobSidecarsByRoot v1 message topic.
 const BlobSidecarsByRootName = "/blob_sidecars_by_root"
 
+// ColumnSidecarsByRangeName is the name for the ColumnSidecarsByRange v1 message topic.
+const ColumnSidecarsByRangeName = "/column_sidecars_by_range"
+
+// ColumnSidecarsByRootName is the name for the ColumnSidecarsByRoot v1 message topic.
+const ColumnSidecarsByRootName = "/column_sidecars_by_root"
+
 const (
 	// V1 RPC Topics
 	// RPCStatusTopicV1 defines the v1 topic for the status rpc method.
@@ -66,6 +75,14 @@ const (
 	// /eth2/beacon_chain/req/blob_sidecars_by_root/1/
 	RPCBlobSidecarsByRootTopicV1 = protocolPrefix + BlobSidecarsByRootName + SchemaVersionV1
 
+	// RPCColumnSidecarsByRangeTopicV1 is a topic for requesting column sidecars
+	// in the slot range [start_slot, start_slot + count), leading up to the current head block as selected by fork choice.
+	// Protocol ID: /eth2/beacon_chain/req/column_sidecars_by_range/1/ - New in deneb.
+	RPCColumnSidecarsByRangeTopicV1 = protocolPrefix + ColumnSidecarsByRangeName + SchemaVersionV1
+	// RPCColumnSidecarsByRootTopicV1 is a topic for requesting column sidecars by their block root. New in deneb.
+	// /eth2/beacon_chain/req/column_sidecars_by_root/1/
+	RPCColumnSidecarsByRootTopicV1 = protocolPrefix + ColumnSidecarsByRootName + SchemaVersionV1
+
 	// V2 RPC Topics
 	// RPCBlocksByRangeTopicV2 defines v2 the topic for the blocks by range rpc method.
 	RPCBlocksByRangeTopicV2 = protocolPrefix + BeaconBlocksByRangeMessageName + SchemaVersionV2
@@ -73,6 +90,9 @@ const (
 	RPCBlocksByRootTopicV2 = protocolPrefix + BeaconBlocksByRootsMessageName + SchemaVersionV2
 	// RPCMetaDataTopicV2 defines the v2 topic for the metadata rpc method.
 	RPCMetaDataTopicV2 = protocolPrefix + MetadataMessageName + SchemaVersionV2
+
+	// V3 RPC Topics
+	RPCMetaDataTopicV3 = protocolPrefix + MetadataMessageName + SchemaVersionV3
 )
 
 // RPC errors for topic parsing.
@@ -101,6 +121,10 @@ var RPCTopicMappings = map[string]interface{}{
 	RPCBlobSidecarsByRangeTopicV1: new(pb.BlobSidecarsByRangeRequest),
 	// BlobSidecarsByRoot v1 Message
 	RPCBlobSidecarsByRootTopicV1: new(p2ptypes.BlobSidecarsByRootReq),
+	// ColumnSidecarsByRange v1 Message
+	RPCColumnSidecarsByRangeTopicV1: new(pb.ColumnSidecarsByRangeRequest),
+	// ColumnSidecarsByRoot v1 Message
+	RPCColumnSidecarsByRootTopicV1: new(p2ptypes.ColumnSidecarsByRootReq),
 }
 
 // Maps all registered protocol prefixes.
@@ -119,6 +143,8 @@ var messageMapping = map[string]bool{
 	MetadataMessageName:            true,
 	BlobSidecarsByRangeName:        true,
 	BlobSidecarsByRootName:         true,
+	ColumnSidecarsByRangeName:      true,
+	ColumnSidecarsByRootName:       true,
 }
 
 // Maps all the RPC messages which are to updated in altair.
@@ -128,9 +154,15 @@ var altairMapping = map[string]bool{
 	MetadataMessageName:            true,
 }
 
+// Maps all the RPC messages which are to updated in altair.
+var denebMapping = map[string]bool{
+	MetadataMessageName: true,
+}
+
 var versionMapping = map[string]bool{
 	SchemaVersionV1: true,
 	SchemaVersionV2: true,
+	SchemaVersionV3: true,
 }
 
 // OmitContextBytesV1 keeps track of which RPC methods do not write context bytes in their v1 incarnations.
@@ -265,6 +297,10 @@ func TopicFromMessage(msg string, epoch primitives.Epoch) (string, error) {
 	isAltair := epoch >= params.BeaconConfig().AltairForkEpoch
 	if isAltair && altairMapping[msg] {
 		version = SchemaVersionV2
+	}
+	isDeneb := epoch >= params.BeaconConfig().DenebForkEpoch
+	if isDeneb && denebMapping[msg] {
+		version = SchemaVersionV3
 	}
 	return protocolPrefix + msg + version, nil
 }

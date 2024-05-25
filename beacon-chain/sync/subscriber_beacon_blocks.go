@@ -33,7 +33,8 @@ func (s *Service) beaconBlockSubscriber(ctx context.Context, msg proto.Message) 
 		return err
 	}
 
-	if err := s.cfg.chain.ReceiveBlock(ctx, signed, root, nil); err != nil {
+	//if err := s.cfg.chain.ReceiveBlock(ctx, signed, root, nil); err != nil {
+	if err := s.cfg.chain.ReceiveBlock2(ctx, signed, root, nil); err != nil {
 		if blockchain.IsInvalidBlock(err) {
 			r := blockchain.InvalidBlockRoot(err)
 			if r != [32]byte{} {

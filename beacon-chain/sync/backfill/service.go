@@ -20,25 +20,27 @@ import (
 )
 
 type Service struct {
-	ctx             context.Context
-	enabled         bool // service is disabled by default while feature is experimental
-	clock           *startup.Clock
-	store           *Store
-	ms              minimumSlotter
-	cw              startup.ClockWaiter
-	verifierWaiter  InitializerWaiter
-	newBlobVerifier verification.NewBlobVerifier
-	nWorkers        int
-	batchSeq        *batchSequencer
-	batchSize       uint64
-	pool            batchWorkerPool
-	verifier        *verifier
-	ctxMap          sync.ContextByteVersions
-	p2p             p2p.P2P
-	pa              PeerAssigner
-	batchImporter   batchImporter
-	blobStore       *filesystem.BlobStorage
-	initSyncWaiter  func() error
+	ctx            context.Context
+	enabled        bool // service is disabled by default while feature is experimental
+	clock          *startup.Clock
+	store          *Store
+	ms             minimumSlotter
+	cw             startup.ClockWaiter
+	verifierWaiter InitializerWaiter
+	//newBlobVerifier verification.NewBlobVerifier
+	newColumnVerifier verification.NewColumnVerifier
+	nWorkers          int
+	batchSeq          *batchSequencer
+	batchSize         uint64
+	pool              batchWorkerPool
+	verifier          *verifier
+	ctxMap            sync.ContextByteVersions
+	p2p               p2p.P2P
+	pa                PeerAssigner
+	batchImporter     batchImporter
+	//blobStore       *filesystem.BlobStorage
+	columnStore    *filesystem.ColumnStorage
+	initSyncWaiter func() error
 }
 
 var _ runtime.Service = (*Service)(nil)
@@ -138,11 +140,11 @@ func WithMinimumSlot(s primitives.Slot) ServiceOption {
 
 // NewService initializes the backfill Service. Like all implementations of the Service interface,
 // the service won't begin its runloop until Start() is called.
-func NewService(ctx context.Context, su *Store, bStore *filesystem.BlobStorage, cw startup.ClockWaiter, p p2p.P2P, pa PeerAssigner, opts ...ServiceOption) (*Service, error) {
+func NewService(ctx context.Context, su *Store, cStore *filesystem.ColumnStorage, cw startup.ClockWaiter, p p2p.P2P, pa PeerAssigner, opts ...ServiceOption) (*Service, error) {
 	s := &Service{
 		ctx:           ctx,
 		store:         su,
-		blobStore:     bStore,
+		columnStore:   cStore,
 		cw:            cw,
 		ms:            minimumBackfillSlot,
 		p2p:           p,
@@ -264,7 +266,7 @@ func (s *Service) Start() {
 	}
 	s.clock = clock
 	v, err := s.verifierWaiter.WaitForInitializer(ctx)
-	s.newBlobVerifier = newBlobVerifierFromInitializer(v)
+	s.newColumnVerifier = newColumnVerifierFromInitializer(v)
 
 	if err != nil {
 		log.WithError(err).Error("Could not initialize blob verifier in backfill service")
@@ -296,7 +298,7 @@ func (s *Service) Start() {
 			return
 		}
 	}
-	s.pool.spawn(ctx, s.nWorkers, clock, s.pa, s.verifier, s.ctxMap, s.newBlobVerifier, s.blobStore)
+	s.pool.spawn(ctx, s.nWorkers, clock, s.pa, s.verifier, s.ctxMap, s.newColumnVerifier, s.columnStore)
 	s.batchSeq = newBatchSequencer(s.nWorkers, s.ms(s.clock.CurrentSlot()), primitives.Slot(status.LowSlot), primitives.Slot(s.batchSize))
 	if err = s.initBatches(); err != nil {
 		log.WithError(err).Error("Non-recoverable error in backfill service")
@@ -361,5 +363,11 @@ func minimumBackfillSlot(current primitives.Slot) primitives.Slot {
 func newBlobVerifierFromInitializer(ini *verification.Initializer) verification.NewBlobVerifier {
 	return func(b blocks.ROBlob, reqs []verification.Requirement) verification.BlobVerifier {
 		return ini.NewBlobVerifier(b, reqs)
+	}
+}
+
+func newColumnVerifierFromInitializer(ini *verification.Initializer) verification.NewColumnVerifier {
+	return func(b blocks.ROColumn, reqs []verification.Requirement) verification.ColumnVerifier {
+		return ini.NewColumnVerifier(b, reqs)
 	}
 }

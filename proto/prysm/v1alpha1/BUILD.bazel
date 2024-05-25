@@ -86,6 +86,7 @@ ssz_gen_marshal(
         "ENRForkID",
         "MetaDataV0",
         "MetaDataV1",
+        "MetaDataV2",
         "Status",
         "AggregateAttestationAndProof",
         "Attestation",

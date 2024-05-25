@@ -8,13 +8,15 @@ import (
 // GlobalFlags specifies all the global flags for the
 // beacon node.
 type GlobalFlags struct {
-	SubscribeToAllSubnets      bool
-	MinimumSyncPeers           int
-	MinimumPeersPerSubnet      int
-	BlockBatchLimit            int
-	BlockBatchLimitBurstFactor int
-	BlobBatchLimit             int
-	BlobBatchLimitBurstFactor  int
+	SubscribeToAllSubnets       bool
+	MinimumSyncPeers            int
+	MinimumPeersPerSubnet       int
+	BlockBatchLimit             int
+	BlockBatchLimitBurstFactor  int
+	BlobBatchLimit              int
+	BlobBatchLimitBurstFactor   int
+	ColumnBatchLimit            int
+	ColumnBatchLimitBurstFactor int
 }
 
 var globalConfig *GlobalFlags
@@ -44,6 +46,8 @@ func ConfigureGlobalFlags(ctx *cli.Context) {
 	cfg.BlockBatchLimitBurstFactor = ctx.Int(BlockBatchLimitBurstFactor.Name)
 	cfg.BlobBatchLimit = ctx.Int(BlobBatchLimit.Name)
 	cfg.BlobBatchLimitBurstFactor = ctx.Int(BlobBatchLimitBurstFactor.Name)
+	cfg.ColumnBatchLimit = ctx.Int(ColumnBatchLimit.Name)
+	cfg.ColumnBatchLimitBurstFactor = ctx.Int(ColumnBatchLimitBurstFactor.Name)
 	cfg.MinimumPeersPerSubnet = ctx.Int(MinPeersPerSubnet.Name)
 	configureMinimumPeers(ctx, cfg)
 

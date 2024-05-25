@@ -89,6 +89,13 @@ var (
 			Buckets: []float64{5, 10, 50, 100, 150, 250, 500, 1000, 2000},
 		},
 	)
+	rpcColumnsByRangeResponseLatency = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "rpc_columns_by_range_response_latency_milliseconds",
+			Help:    "Captures total time to respond to rpc ColumnsByRange requests in a milliseconds distribution",
+			Buckets: []float64{5, 10, 50, 100, 150, 250, 500, 1000, 2000},
+		},
+	)
 	arrivalBlockPropagationHistogram = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "block_arrival_latency_milliseconds",
@@ -150,6 +157,18 @@ var (
 			Help: "Time to verify gossiped blob sidecars",
 		},
 	)
+	columnSidecarArrivalGossipSummary = promauto.NewSummary(
+		prometheus.SummaryOpts{
+			Name: "gossip_column_sidecar_arrival_milliseconds",
+			Help: "Time for gossiped column sidecars to arrive",
+		},
+	)
+	columnSidecarVerificationGossipSummary = promauto.NewSummary(
+		prometheus.SummaryOpts{
+			Name: "gossip_column_sidecar_verification_milliseconds",
+			Help: "Time to verify gossiped column sidecars",
+		},
+	)
 	pendingAttCount = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "gossip_pending_attestations_total",
 		Help: "increased when receiving a new pending attestation",
@@ -168,6 +187,14 @@ var (
 		prometheus.CounterOpts{
 			Name: "gossip_missing_parent_blob_sidecar_total",
 			Help: "The number of blob sidecars that were dropped due to missing parent block",
+		},
+	)
+
+	// Dropped column sidecars due to missing parent block.
+	missingParentColumnSidecarCount = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "gossip_missing_parent_column_sidecar_total",
+			Help: "The number of column sidecars that were dropped due to missing parent block",
 		},
 	)
 )

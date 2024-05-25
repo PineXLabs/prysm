@@ -351,6 +351,7 @@ func (s *Service) broadcastObject(ctx context.Context, obj ssz.Marshaler, topic 
 	}
 	if err := s.PublishToTopic(ctx, topic+s.Encoding().ProtocolSuffix(), buf.Bytes()); err != nil {
 		err := errors.Wrap(err, "could not publish message")
+		log.Debug(err.Error())
 		tracing.AnnotateError(span, err)
 		return err
 	}

@@ -45,10 +45,22 @@ var (
 			Help: "BlobSidecar bytes downloaded from peers for backfill.",
 		},
 	)
+	backfillColumnsApproximateBytes = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "backfill_columns_bytes_downloaded",
+			Help: "ColumnSidecar bytes downloaded from peers for backfill.",
+		},
+	)
 	backfillBlobsDownloadCount = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "backfill_blobs_download_count",
 			Help: "Number of BlobSidecar values downloaded from peers for backfill.",
+		},
+	)
+	backfillColumnsDownloadCount = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "backfill_columns_download_count",
+			Help: "Number of ColumnSidecar values downloaded from peers for backfill.",
 		},
 	)
 	backfillBlocksDownloadCount = promauto.NewCounter(
@@ -85,6 +97,13 @@ var (
 			Buckets: []float64{100, 300, 1000, 2000, 4000, 8000},
 		},
 	)
+	backfillBatchTimeDownloadingColumns = promauto.NewHistogram(
+		prometheus.HistogramOpts{
+			Name:    "backfill_batch_columns_time_download",
+			Help:    "Time, in milliseconds, batch spent downloading columns from peer.",
+			Buckets: []float64{100, 300, 1000, 2000, 4000, 8000},
+		},
+	)
 	backfillBatchTimeVerifying = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "backfill_batch_time_verify",
@@ -99,10 +118,16 @@ func blobValidationMetrics(_ blocks.ROBlob) error {
 	return nil
 }
 
+func columnValidationMetrics(_ blocks.ROColumn) error {
+	backfillColumnsDownloadCount.Inc()
+	return nil
+}
+
 func blockValidationMetrics(interfaces.ReadOnlySignedBeaconBlock) error {
 	backfillBlocksDownloadCount.Inc()
 	return nil
 }
 
 var _ sync.BlobResponseValidation = blobValidationMetrics
+var _ sync.ColumnResponseValidation = columnValidationMetrics
 var _ sync.BeaconBlockProcessor = blockValidationMetrics

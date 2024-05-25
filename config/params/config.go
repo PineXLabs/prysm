@@ -226,6 +226,7 @@ type BeaconChainConfig struct {
 	MinEpochsForBlobsSidecarsRequest   primitives.Epoch `yaml:"MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS" spec:"true"`   // MinEpochsForBlobsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
 	MinEpochsForColumnsSidecarsRequest primitives.Epoch `yaml:"MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS" spec:"true"` // MinEpochsForColumnsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
 	MaxRequestBlobSidecars             uint64           `yaml:"MAX_REQUEST_BLOB_SIDECARS" spec:"true"`               // MaxRequestBlobSidecars is the maximum number of blobs to request in a single request.
+	MaxRequestColumnSidecars           uint64           `yaml:"MAX_REQUEST_COLUMN_SIDECARS" spec:"true"`             // MaxRequestColumnSidecars is the maximum number of columns to request in a single request.
 	MaxRequestBlocksDeneb              uint64           `yaml:"MAX_REQUEST_BLOCKS_DENEB" spec:"true"`                // MaxRequestBlocksDeneb is the maximum number of blocks in a single request after the deneb epoch.
 
 	// Networking Specific Parameters
@@ -245,6 +246,10 @@ type BeaconChainConfig struct {
 	AttestationSubnetPrefixBits     uint64          `yaml:"ATTESTATION_SUBNET_PREFIX_BITS" spec:"true"`     // AttestationSubnetPrefixBits is defined as (ceillog2(ATTESTATION_SUBNET_COUNT) + ATTESTATION_SUBNET_EXTRA_BITS).
 	SubnetsPerNode                  uint64          `yaml:"SUBNETS_PER_NODE" spec:"true"`                   // SubnetsPerNode is the number of long-lived subnets a beacon node should be subscribed to.
 	NodeIdBits                      uint64          `yaml:"NODE_ID_BITS" spec:"true"`                       // NodeIdBits defines the bit length of a node id.
+
+	// Column related
+	BeaconColumnSubnetCustodyRequired uint64 `yaml:"BEACON_COLUMN_SUBNET_CUSTODY_REQUIRED" spec:"true"` // BeaconColumnSubnetCustodyRequired specifies the minimum subnet that a beacon node should connected to.
+	ColumnCount                       uint64 `yaml:"COLUMN_COUNT" spec:"true"`                          // ColumnCount specifies the total column count.
 }
 
 // InitializeForkSchedule initializes the schedules forks baked into the config.

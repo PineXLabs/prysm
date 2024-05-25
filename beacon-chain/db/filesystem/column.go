@@ -30,7 +30,7 @@ var (
 // ColumnStorageOption is a functional option for configuring a ColumnStorage.
 type ColumnStorageOption func(*ColumnStorage) error
 
-// WithBasePath is a required option that sets the base path of blob storage.
+// WithBasePath is a required option that sets the base path of column storage.
 func WithColumnBasePath(base string) ColumnStorageOption {
 	return func(c *ColumnStorage) error {
 		c.base = base
@@ -128,7 +128,7 @@ func (cs *ColumnStorage) Save(sidecar blocks.VerifiedROColumn) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize column sidecar data")
 	} else if len(sidecarData) == 0 {
-		return errSidecarEmptySSZData
+		return errColumnSidecarEmptySSZData
 	}
 
 	if err := cs.fs.MkdirAll(fname.dir(), directoryPermissions); err != nil {

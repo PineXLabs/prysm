@@ -84,7 +84,7 @@ func (c *Collector) Rate() float64 {
 // Remaining returns the remaining capacity of the internal bucket associated
 // with key.  If key is not associated with a bucket internally, it is treated
 // as being empty.
-func (c *Collector) Remaining(key string) int64 {
+func (c *Collector) Remaining(key string) int64 { //todo: updated with columns, maybe too small now
 	return c.capacity - c.Count(key)
 }
 

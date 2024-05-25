@@ -53,7 +53,7 @@ func (s *Service) metaDataHandler(_ context.Context, _ interface{}, stream libp2
 	currMd := s.cfg.p2p.Metadata()
 	switch streamVersion {
 	case p2p.SchemaVersionV1:
-		// We have a v1 metadata object saved locally, so we
+		// We have a v1 or v2 metadata object saved locally, so we
 		// convert it back to a v0 metadata object.
 		if currMd.Version() != version.Phase0 {
 			currMd = wrapper.WrappedMetadataV0(
@@ -63,14 +63,35 @@ func (s *Service) metaDataHandler(_ context.Context, _ interface{}, stream libp2
 				})
 		}
 	case p2p.SchemaVersionV2:
-		// We have a v0 metadata object saved locally, so we
+		// We have a v0 or v2 metadata object saved locally, so we
 		// convert it to a v1 metadata object.
 		if currMd.Version() != version.Altair {
+			syncnets := bitfield.Bitvector4{byte(0x00)}
+			if currMd.Version() == version.Deneb {
+				syncnets = currMd.MetadataObjV2().Syncnets
+			}
 			currMd = wrapper.WrappedMetadataV1(
 				&pb.MetaDataV1{
 					Attnets:   currMd.AttnetsBitfield(),
 					SeqNumber: currMd.SequenceNumber(),
-					Syncnets:  bitfield.Bitvector4{byte(0x00)},
+					Syncnets:  syncnets,
+				})
+
+		}
+	case p2p.SchemaVersionV3:
+		// We have a v1 or v2 metadata object saved locally, so we
+		// convert it back to a v2 metadata object.
+		if currMd.Version() != version.Deneb {
+			syncnets := bitfield.Bitvector4{byte(0x00)}
+			if currMd.Version() == version.Altair {
+				syncnets = currMd.MetadataObjV1().Syncnets
+			}
+			currMd = wrapper.WrappedMetadataV2(
+				&pb.MetaDataV2{
+					Attnets:   currMd.AttnetsBitfield(),
+					SeqNumber: currMd.SequenceNumber(),
+					Syncnets:  syncnets,
+					Colnets:   bitfield.NewBitvector64(),
 				})
 		}
 	}
@@ -123,6 +144,8 @@ func (s *Service) sendMetaDataRequest(ctx context.Context, id peer.ID) (metadata
 		topicVersion = p2p.SchemaVersionV1
 	case version.Altair:
 		topicVersion = p2p.SchemaVersionV2
+	case version.Deneb:
+		topicVersion = p2p.SchemaVersionV3
 	}
 	if err := validateVersion(topicVersion, stream); err != nil {
 		return nil, err

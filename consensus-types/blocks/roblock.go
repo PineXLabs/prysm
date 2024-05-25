@@ -140,3 +140,48 @@ func (s BlockWithROBlobsSlice) Swap(i, j int) {
 func (s BlockWithROBlobsSlice) Len() int {
 	return len(s)
 }
+
+// BlockWithROColumns is a wrapper that collects the block and column values together.
+// This is helpful because these values are collated from separate RPC requests.
+type BlockWithROColumns struct {
+	Block   ROBlock
+	Columns []ROColumn
+}
+
+// BlockWithROColumnsSlice gives convenient access to getting a slice of just the ROBlocks,
+// and defines sorting helpers.
+type BlockWithROColumnsSlice []BlockWithROColumns
+
+func (s BlockWithROColumnsSlice) ROBlocks() []ROBlock {
+	r := make([]ROBlock, len(s))
+	for i := range s {
+		r[i] = s[i].Block
+	}
+	return r
+}
+
+// Less reports whether the element with index i must sort before the element with index j.
+// ROBlocks are ordered first by their slot,
+// with a lexicographic sort of roots breaking ties for slots with duplicate blocks.
+func (s BlockWithROColumnsSlice) Less(i, j int) bool {
+	si, sj := s[i].Block.Block().Slot(), s[j].Block.Block().Slot()
+
+	// lower slot wins
+	if si != sj {
+		return si < sj
+	}
+
+	// break slot tie lexicographically comparing roots byte for byte
+	ri, rj := s[i].Block.Root(), s[j].Block.Root()
+	return bytes.Compare(ri[:], rj[:]) < 0
+}
+
+// Swap swaps the elements with indexes i and j.
+func (s BlockWithROColumnsSlice) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+// Len is the number of elements in the collection.
+func (s BlockWithROColumnsSlice) Len() int {
+	return len(s)
+}

@@ -413,7 +413,7 @@ func (vs *Server) broadcastAndReceiveColumns(ctx context.Context, sidecars []*et
 			return errors.Wrap(err, "ROColumn creation failed")
 		}
 		verifiedColumn := blocks.NewVerifiedROColumn(readOnlySc)
-		if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil { //todo: cause painc, must to complete
+		if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil {
 			return errors.Wrap(err, "receive column failed")
 		}
 		vs.OperationNotifier.OperationFeed().Send(&feed.Event{

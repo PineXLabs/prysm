@@ -47,3 +47,6 @@ tmp
 
 # spectest coverage reports
 report.txt
+
+# UML
+UML

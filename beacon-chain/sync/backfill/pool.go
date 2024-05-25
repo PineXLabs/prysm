@@ -17,7 +17,7 @@ import (
 )
 
 type batchWorkerPool interface {
-	spawn(ctx context.Context, n int, clock *startup.Clock, a PeerAssigner, v *verifier, cm sync.ContextByteVersions, blobVerifier verification.NewBlobVerifier, bfs *filesystem.BlobStorage)
+	spawn(ctx context.Context, n int, clock *startup.Clock, a PeerAssigner, v *verifier, cm sync.ContextByteVersions, blobVerifier verification.NewColumnVerifier, bfs *filesystem.ColumnStorage)
 	todo(b batch)
 	complete() (batch, error)
 }
@@ -26,10 +26,10 @@ type worker interface {
 	run(context.Context)
 }
 
-type newWorker func(id workerId, in, out chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, nbv verification.NewBlobVerifier, bfs *filesystem.BlobStorage) worker
+type newWorker func(id workerId, in, out chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, nbv verification.NewColumnVerifier, bfs *filesystem.ColumnStorage) worker
 
 func defaultNewWorker(p p2p.P2P) newWorker {
-	return func(id workerId, in, out chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, nbv verification.NewBlobVerifier, bfs *filesystem.BlobStorage) worker {
+	return func(id workerId, in, out chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, nbv verification.NewColumnVerifier, bfs *filesystem.ColumnStorage) worker {
 		return newP2pWorker(id, p, in, out, c, v, cm, nbv, bfs)
 	}
 }
@@ -62,11 +62,11 @@ func newP2PBatchWorkerPool(p p2p.P2P, maxBatches int) *p2pBatchWorkerPool {
 	}
 }
 
-func (p *p2pBatchWorkerPool) spawn(ctx context.Context, n int, c *startup.Clock, a PeerAssigner, v *verifier, cm sync.ContextByteVersions, nbv verification.NewBlobVerifier, bfs *filesystem.BlobStorage) {
+func (p *p2pBatchWorkerPool) spawn(ctx context.Context, n int, c *startup.Clock, a PeerAssigner, v *verifier, cm sync.ContextByteVersions, ncv verification.NewColumnVerifier, cfs *filesystem.ColumnStorage) {
 	p.ctx, p.cancel = context.WithCancel(ctx)
 	go p.batchRouter(a)
 	for i := 0; i < n; i++ {
-		go p.newWorker(workerId(i), p.toWorkers, p.fromWorkers, c, v, cm, nbv, bfs).run(p.ctx)
+		go p.newWorker(workerId(i), p.toWorkers, p.fromWorkers, c, v, cm, ncv, cfs).run(p.ctx)
 	}
 }
 
@@ -117,7 +117,7 @@ func (p *p2pBatchWorkerPool) batchRouter(pa PeerAssigner) {
 		case b := <-p.fromWorkers:
 			pid := b.busy
 			busy[pid] = false
-			if b.state == batchBlobSync {
+			if b.state == batchColumnSync {
 				todo = append(todo, b)
 				sortBatchDesc(todo)
 			} else {
@@ -145,7 +145,7 @@ func (p *p2pBatchWorkerPool) batchRouter(pa PeerAssigner) {
 		for _, pid := range assigned {
 			busy[pid] = true
 			todo[0].busy = pid
-			p.toWorkers <- todo[0].withPeer(pid)
+			p.toWorkers <- todo[0].withPeer(pid) //Drive the worker to work
 			if todo[0].begin < earliest {
 				earliest = todo[0].begin
 				oldestBatch.Set(float64(earliest))

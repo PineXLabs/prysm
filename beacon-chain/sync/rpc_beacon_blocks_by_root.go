@@ -55,14 +55,16 @@ func (s *Service) sendRecentBeaconBlocksRequest(ctx context.Context, requests *t
 		if err != nil {
 			return err
 		}
-		request, err := s.pendingBlobsRequestForBlock(blkRoot, blk)
+		//request, err := s.pendingBlobsRequestForBlock(blkRoot, blk)
+		request, err := s.pendingColumnsRequestForBlock(blkRoot, blk)
 		if err != nil {
 			return err
 		}
 		if len(request) == 0 {
 			continue
 		}
-		if err := s.sendAndSaveBlobSidecars(ctx, request, id, blk); err != nil {
+		//if err := s.sendAndSaveBlobSidecars(ctx, request, id, blk); err != nil {
+		if err := s.sendAndSaveColumnSidecars(ctx, request, id, blk); err != nil {
 			return err
 		}
 	}
@@ -170,6 +172,43 @@ func (s *Service) sendAndSaveBlobSidecars(ctx context.Context, request types.Blo
 	return nil
 }
 
+// sendAndSaveColumnSidecars sends the column request and saves received sidecars.
+func (s *Service) sendAndSaveColumnSidecars(ctx context.Context, request types.ColumnSidecarsByRootReq, peerID peer.ID, block interfaces.ReadOnlySignedBeaconBlock) error {
+	if len(request) == 0 {
+		return nil
+	}
+
+	sidecars, err := SendColumnSidecarByRoot(ctx, s.cfg.clock, s.cfg.p2p, peerID, s.ctxMap, &request)
+	if err != nil {
+		return err
+	}
+
+	RoBlock, err := blocks.NewROBlock(block)
+	if err != nil {
+		return err
+	}
+	if len(sidecars) != len(request) {
+		return fmt.Errorf("received %d column sidecars, expected %d for RPC", len(sidecars), len(request))
+	}
+	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.PendingQueueColumnSidecarRequirements)
+	for _, sidecar := range sidecars {
+		if err := verify.ColumnAlignsWithBlock(sidecar, RoBlock); err != nil {
+			return err
+		}
+		log.WithFields(columnFields(sidecar)).Debug("Received column sidecar RPC")
+	}
+	vscs, err := bv.VerifiedROColumns(ctx, RoBlock, sidecars)
+	if err != nil {
+		return err
+	}
+	for i := range vscs {
+		if err := s.cfg.columnStorage.Save(vscs[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Service) pendingBlobsRequestForBlock(root [32]byte, b interfaces.ReadOnlySignedBeaconBlock) (types.BlobSidecarsByRootReq, error) {
 	if b.Version() < version.Deneb {
 		return nil, nil // Block before deneb has no blob.
@@ -182,6 +221,20 @@ func (s *Service) pendingBlobsRequestForBlock(root [32]byte, b interfaces.ReadOn
 		return nil, nil
 	}
 	return s.constructPendingBlobsRequest(root, len(cc))
+}
+
+func (s *Service) pendingColumnsRequestForBlock(root [32]byte, b interfaces.ReadOnlySignedBeaconBlock) (types.ColumnSidecarsByRootReq, error) {
+	if b.Version() < version.Deneb {
+		return nil, nil // Block before deneb has no blob.
+	}
+	cc, err := b.Block().Body().BlobKzgCommitments()
+	if err != nil {
+		return nil, err
+	}
+	if len(cc) == 0 {
+		return nil, nil
+	}
+	return s.constructPendingColumnsRequest(root, len(cc))
 }
 
 // constructPendingBlobsRequest creates a request for BlobSidecars by root, considering blobs already in DB.
@@ -197,6 +250,19 @@ func (s *Service) constructPendingBlobsRequest(root [32]byte, commitments int) (
 	return requestsForMissingIndices(stored, commitments, root), nil
 }
 
+// constructPendingColumnsRequest creates a request for ColumnSidecars by root, considering columns already in DB.
+func (s *Service) constructPendingColumnsRequest(root [32]byte, commitments int) (types.ColumnSidecarsByRootReq, error) {
+	if commitments == 0 {
+		return nil, nil
+	}
+	stored, err := s.cfg.columnStorage.Indices(root)
+	if err != nil {
+		return nil, err
+	}
+
+	return requestsForMissingColumnIndices(stored, commitments, root), nil
+}
+
 // requestsForMissingIndices constructs a slice of BlobIdentifiers that are missing from
 // local storage, based on a mapping that represents which indices are locally stored,
 // and the highest expected index.
@@ -205,6 +271,19 @@ func requestsForMissingIndices(storedIndices [fieldparams.MaxBlobsPerBlock]bool,
 	for i := uint64(0); i < uint64(commitments); i++ {
 		if !storedIndices[i] {
 			ids = append(ids, &eth.BlobIdentifier{Index: i, BlockRoot: root[:]})
+		}
+	}
+	return ids
+}
+
+// requestsForMissingColumnIndices constructs a slice of ColumnIdentifiers that are missing from
+// local storage, based on a mapping that represents which indices are locally stored,
+// and the highest expected index.
+func requestsForMissingColumnIndices(storedIndices [fieldparams.MaxColumnsPerBlock]bool, commitments int, root [32]byte) []*eth.ColumnIdentifier {
+	var ids []*eth.ColumnIdentifier
+	for i := uint64(0); i < uint64(commitments); i++ {
+		if !storedIndices[i] {
+			ids = append(ids, &eth.ColumnIdentifier{Index: i, BlockRoot: root[:]})
 		}
 	}
 	return ids

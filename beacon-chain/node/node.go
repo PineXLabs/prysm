@@ -181,14 +181,6 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, opts ...Option) (*Beaco
 	}
 
 	// Allow tests to set it as an opt.
-	//if beacon.BlobStorage == nil {
-	//	beacon.BlobStorageOptions = append(beacon.BlobStorageOptions, filesystem.WithSaveFsync(features.Get().BlobSaveFsync))
-	//	blobs, err := filesystem.NewBlobStorage(beacon.BlobStorageOptions...)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	beacon.BlobStorage = blobs
-	//}
 	if beacon.ColumnStorage == nil {
 		beacon.ColumnStorageOptions = append(beacon.ColumnStorageOptions, filesystem.WithColumnSaveFsync(features.Get().ColumnSaveFsync))
 		columns, err := filesystem.NewColumnStorage(beacon.ColumnStorageOptions...)
@@ -214,7 +206,7 @@ func New(cliCtx *cli.Context, cancel context.CancelFunc, opts ...Option) (*Beaco
 		backfill.WithInitSyncWaiter(initSyncWaiter(ctx, beacon.initialSyncComplete)),
 	)
 
-	bf, err := backfill.NewService(ctx, bfs, beacon.BlobStorage, beacon.clockWaiter, beacon.fetchP2P(), pa, beacon.BackfillOpts...)
+	bf, err := backfill.NewService(ctx, bfs, beacon.ColumnStorage, beacon.clockWaiter, beacon.fetchP2P(), pa, beacon.BackfillOpts...)
 	if err != nil {
 		return nil, errors.Wrap(err, "error initializing backfill service")
 	}
@@ -514,7 +506,8 @@ func (b *BeaconNode) clearDB(clearDB, forceClearDB bool, d *kv.Store, dbPath str
 			return nil, errors.Wrap(err, "could not clear database")
 		}
 
-		if err := b.BlobStorage.Clear(); err != nil {
+		//if err := b.BlobStorage.Clear(); err != nil {
+		if err := b.ColumnStorage.Clear(); err != nil {
 			return nil, errors.Wrap(err, "could not clear blob storage")
 		}
 
@@ -877,7 +870,7 @@ func (b *BeaconNode) registerSyncService(initialSyncComplete chan struct{}, bFil
 		regularsync.WithClockWaiter(b.clockWaiter),
 		regularsync.WithInitialSyncComplete(initialSyncComplete),
 		regularsync.WithStateNotifier(b),
-		regularsync.WithBlobStorage(b.BlobStorage),
+		regularsync.WithColumnStorage(b.ColumnStorage),
 		regularsync.WithVerifierWaiter(b.verifyInitWaiter),
 		regularsync.WithAvailableBlocker(bFillStore),
 	)
@@ -902,7 +895,7 @@ func (b *BeaconNode) registerInitialSyncService(complete chan struct{}) error {
 		BlockNotifier:       b,
 		ClockWaiter:         b.clockWaiter,
 		InitialSyncComplete: complete,
-		BlobStorage:         b.BlobStorage,
+		ColumnStorage:       b.ColumnStorage,
 	}, opts...)
 	return b.services.RegisterService(is)
 }
@@ -1009,37 +1002,37 @@ func (b *BeaconNode) registerRPCService(router *mux.Router) error {
 		ForkchoiceFetcher:             chainService,
 		FinalizationFetcher:           chainService,
 		BlockReceiver:                 chainService,
-		BlobReceiver:                  chainService,
-		ColumnReceiver:                chainService,
-		AttestationReceiver:           chainService,
-		GenesisTimeFetcher:            chainService,
-		GenesisFetcher:                chainService,
-		OptimisticModeFetcher:         chainService,
-		AttestationsPool:              b.attestationPool,
-		ExitPool:                      b.exitPool,
-		SlashingsPool:                 b.slashingsPool,
-		BLSChangesPool:                b.blsToExecPool,
-		SyncCommitteeObjectPool:       b.syncCommitteePool,
-		ExecutionChainService:         web3Service,
-		ExecutionChainInfoFetcher:     web3Service,
-		ChainStartFetcher:             chainStartFetcher,
-		MockEth1Votes:                 mockEth1DataVotes,
-		SyncService:                   syncService,
-		DepositFetcher:                depositFetcher,
-		PendingDepositFetcher:         b.depositCache,
-		BlockNotifier:                 b,
-		StateNotifier:                 b,
-		OperationNotifier:             b,
-		StateGen:                      b.stateGen,
-		EnableDebugRPCEndpoints:       enableDebugRPCEndpoints,
-		MaxMsgSize:                    maxMsgSize,
-		BlockBuilder:                  b.fetchBuilderService(),
-		Router:                        router,
-		ClockWaiter:                   b.clockWaiter,
-		BlobStorage:                   b.BlobStorage,
-		ColumnStorage:                 b.ColumnStorage,
-		TrackedValidatorsCache:        b.trackedValidatorsCache,
-		PayloadIDCache:                b.payloadIDCache,
+		//BlobReceiver:                  chainService,
+		ColumnReceiver:            chainService,
+		AttestationReceiver:       chainService,
+		GenesisTimeFetcher:        chainService,
+		GenesisFetcher:            chainService,
+		OptimisticModeFetcher:     chainService,
+		AttestationsPool:          b.attestationPool,
+		ExitPool:                  b.exitPool,
+		SlashingsPool:             b.slashingsPool,
+		BLSChangesPool:            b.blsToExecPool,
+		SyncCommitteeObjectPool:   b.syncCommitteePool,
+		ExecutionChainService:     web3Service,
+		ExecutionChainInfoFetcher: web3Service,
+		ChainStartFetcher:         chainStartFetcher,
+		MockEth1Votes:             mockEth1DataVotes,
+		SyncService:               syncService,
+		DepositFetcher:            depositFetcher,
+		PendingDepositFetcher:     b.depositCache,
+		BlockNotifier:             b,
+		StateNotifier:             b,
+		OperationNotifier:         b,
+		StateGen:                  b.stateGen,
+		EnableDebugRPCEndpoints:   enableDebugRPCEndpoints,
+		MaxMsgSize:                maxMsgSize,
+		BlockBuilder:              b.fetchBuilderService(),
+		Router:                    router,
+		ClockWaiter:               b.clockWaiter,
+		//BlobStorage:               b.BlobStorage,
+		ColumnStorage:          b.ColumnStorage,
+		TrackedValidatorsCache: b.trackedValidatorsCache,
+		PayloadIDCache:         b.payloadIDCache,
 	})
 
 	return b.services.RegisterService(rpcService)

@@ -1,11 +1,13 @@
 package p2p
 
 import (
+	"crypto/rand"
 	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/holiman/uint256"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/testing/assert"
 	"github.com/prysmaticlabs/prysm/v5/testing/require"
@@ -63,4 +65,27 @@ func TestSerializeENR(t *testing.T) {
 		require.NotNil(t, err)
 		assert.ErrorContains(t, "could not serialize nil record", err)
 	})
+}
+
+func TestDistance(t *testing.T) {
+	idBytes := make([]byte, 32)
+	rand.Read(idBytes)
+	nid1 := enode.ID([32]byte(idBytes))
+
+	idBytes2 := make([]byte, 32)
+	rand.Read(idBytes2)
+	nid2 := enode.ID([32]byte(idBytes2))
+
+	idBytes3 := make([]byte, 32)
+	rand.Read(idBytes2)
+	nid3 := enode.ID([32]byte(idBytes3))
+
+	nid1Uint256 := uint256.NewInt(0).SetBytes(nid1.Bytes())
+	nid2Uint256 := uint256.NewInt(0).SetBytes(nid2.Bytes())
+	nid3Uint256 := uint256.NewInt(0).SetBytes(nid3.Bytes())
+	dist12 := uint256.NewInt(0).Xor(nid1Uint256, nid2Uint256)
+	dist13 := uint256.NewInt(0).Xor(nid1Uint256, nid3Uint256)
+	ge := dist12.Gt(dist13)
+	ge2 := enode.DistCmp(nid1, nid2, nid3) > 0
+	require.Equal(t, ge, ge2)
 }
