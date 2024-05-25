@@ -92,6 +92,7 @@ const (
 	RPCMetaDataTopicV2 = protocolPrefix + MetadataMessageName + SchemaVersionV2
 
 	// V3 RPC Topics
+	// RPCMetaDataTopicV3 defines the v3 topic for the metadata rpc method.
 	RPCMetaDataTopicV3 = protocolPrefix + MetadataMessageName + SchemaVersionV3
 )
 
