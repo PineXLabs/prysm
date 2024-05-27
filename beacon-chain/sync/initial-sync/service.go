@@ -323,10 +323,10 @@ func missingColumnRequest(blk blocks.ROBlock, store *filesystem.ColumnStorage) (
 	}
 	onDisk, err := store.Indices(r)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error checking existing blobs for checkpoint sync block root %#x", r)
+		return nil, errors.Wrapf(err, "error checking existing columns for checkpoint sync block root %#x", r)
 	}
 	req := make(p2ptypes.ColumnSidecarsByRootReq, 0, fieldparams.MaxColumnsPerBlock)
-	for i := range cmts {
+	for i := range cmts { //todo Dill: change to column index, not commitments; only used in fetchOriginColumns, not called in current testnet
 		if onDisk[i] {
 			continue
 		}
@@ -390,6 +390,7 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
 	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
+		log.Errorf("In fetchOriginColumns, db.ErrNotFoundOriginBlockRoot, return directly")
 		return nil
 	}
 	blk, err := s.cfg.DB.Block(s.ctx, r)
@@ -398,6 +399,7 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 		return err
 	}
 	if !params.WithinColumnDAPeriod(slots.ToEpoch(blk.Block().Slot()), slots.ToEpoch(s.clock.CurrentSlot())) {
+		log.Debug("In fetchOriginColumns, not WithinColumnDAPeriod, will not fetch origin columns")
 		return nil
 	}
 	rob, err := blocks.NewROBlockWithRoot(blk, r)
