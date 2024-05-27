@@ -55,6 +55,8 @@ var mainnetNetworkConfig = &NetworkConfig{
 		"enr:-LK4QA8FfhaAjlb_BXsXxSfiysR7R52Nhi9JBt4F8SPssu8hdE1BXQQEtVDC3qStCW60LSO7hEsVHv5zm8_6Vnjhcn0Bh2F0dG5ldHOIAAAAAAAAAACEZXRoMpC1MD8qAAAAAP__________gmlkgnY0gmlwhAN4aBKJc2VjcDI1NmsxoQJerDhsJ-KxZ8sHySMOCmTO6sHM3iCFQ6VMvLTe948MyYN0Y3CCI4yDdWRwgiOM",
 		"enr:-LK4QKWrXTpV9T78hNG6s8AM6IO4XH9kFT91uZtFg1GcsJ6dKovDOr1jtAAFPnS2lvNltkOGA9k29BUN7lFh_sjuc9QBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpC1MD8qAAAAAP__________gmlkgnY0gmlwhANAdd-Jc2VjcDI1NmsxoQLQa6ai7y9PMN5hpLe5HmiJSlYzMuzP7ZhwRiwHvqNXdoN0Y3CCI4yDdWRwgiOM",
 	},
+	// dill related
+	ColSubnetEnrKey: "colSubnetEntry",
 }
 
 var mainnetBeaconConfig = &BeaconChainConfig{
@@ -258,15 +260,12 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ExecutionEngineTimeoutValue: 8, // 8 seconds default based on: https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#core
 
 	// Subnet value
-	BlobsidecarSubnetCount:   6,
-	ColumnsidecarSubnetCount: 128,
+	BlobsidecarSubnetCount: 6,
 
-	MaxPerEpochActivationChurnLimit:    8,
-	MinEpochsForBlobsSidecarsRequest:   4096,
-	MinEpochsForColumnsSidecarsRequest: 4096,
-	MaxRequestBlobSidecars:             768,
-	MaxRequestColumnSidecars:           768,
-	MaxRequestBlocksDeneb:              128,
+	MaxPerEpochActivationChurnLimit:  8,
+	MinEpochsForBlobsSidecarsRequest: 4096,
+	MaxRequestBlobSidecars:           768,
+	MaxRequestBlocksDeneb:            128,
 
 	// Values related to networking parameters.
 	GossipMaxSize:                   10 * 1 << 20, // 10 MiB
@@ -285,6 +284,13 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	AttestationSubnetPrefixBits:     6,
 	SubnetsPerNode:                  2,
 	NodeIdBits:                      256,
+
+	// dill related
+	MinEpochsForColumnsSidecarsRequest: 4096,
+	MaxRequestColumnSidecars:           768,
+	ColumnsidecarSubnetCount:           128,
+	BeaconColumnSubnetCustodyRequired:  16,
+	ColumnCount:                        128,
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name
