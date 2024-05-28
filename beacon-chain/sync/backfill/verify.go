@@ -51,7 +51,8 @@ func (v verifiedROBlocks) blobIdents(retentionStart primitives.Slot) ([]blobSumm
 	return bs, nil
 }
 
-func (v verifiedROBlocks) columnIdents(retentionStart primitives.Slot) ([]columnSummary, error) {
+func (v verifiedROBlocks) columnIdents(retentionStart primitives.Slot,
+	columnFilterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) ([]columnSummary, error) {
 	// early return if the newest block is outside the retention window
 	if len(v) > 0 && v[len(v)-1].Block().Slot() < retentionStart {
 		return nil, nil
@@ -71,11 +72,12 @@ func (v verifiedROBlocks) columnIdents(retentionStart primitives.Slot) ([]column
 		if len(c) == 0 {
 			continue
 		}
-		for ci := range c {
+		filter := columnFilterFactory(v[i].Block().Slot(), v[i].Root())
+		for k := range filter {
 			bs = append(bs, columnSummary{
-				blockRoot:   v[i].Root(),
-				signature:   v[i].Signature(),
-				index:       uint64(ci),
+				blockRoot:   v[k].Root(),
+				signature:   v[k].Signature(),
+				index:       k,
 				commitments: c,
 			})
 		}
@@ -186,3 +188,4 @@ func (dc *domainCache) forEpoch(e primitives.Epoch) ([]byte, error) {
 	}
 	return d, nil
 }
+

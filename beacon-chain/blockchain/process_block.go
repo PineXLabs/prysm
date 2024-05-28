@@ -705,7 +705,7 @@ func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected 
 		return nil, err
 	}
 	//log.Debugf("func missingColumnIndices, after cs.Indices(root), len(indices) is %d", len(indices))
-	missing := make(map[uint64]struct{}, fieldparams.MaxColumnsPerBlock)
+	missing := make(map[uint64]struct{})
 	for _, colIdx := range expected {
 		if !indices[colIdx] {
 			missing[colIdx] = struct{}{}

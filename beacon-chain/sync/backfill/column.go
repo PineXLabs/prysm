@@ -29,7 +29,7 @@ type columnSyncConfig struct {
 
 func newColumnSync(current primitives.Slot, vbs verifiedROBlocks, cfg *columnSyncConfig,
 	filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) (*columnSync, error) {
-	expected, err := vbs.columnIdents(cfg.retentionStart)
+	expected, err := vbs.columnIdents(cfg.retentionStart, filterFactory)
 	if err != nil {
 		return nil, err
 	}
