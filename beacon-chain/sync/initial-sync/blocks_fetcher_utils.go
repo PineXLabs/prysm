@@ -357,23 +357,6 @@ func (f *blocksFetcher) calculateHeadAndTargetEpochs() (headEpoch, targetEpoch p
 	return headEpoch, targetEpoch, peers
 }
 
-func subnetToColumns(subnet uint64) []uint64 {
-	colsPerSubnet := params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount
-	res := make([]uint64, colsPerSubnet)
-	for i := range colsPerSubnet {
-		res[i] = subnet*colsPerSubnet + i
-	}
-	return res
-}
-
-func subnetsToColumns(subnets []uint64) []uint64 {
-	res := make([]uint64, 0)
-	for _, s := range subnets {
-		res = append(res, subnetToColumns(s)...)
-	}
-	return res
-}
-
 func colToSubnet(idx uint64) uint64 {
 	colsPerSubnet := params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount
 	return idx / colsPerSubnet

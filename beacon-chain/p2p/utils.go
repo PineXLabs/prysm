@@ -16,6 +16,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/wrapper"
 	ecdsaprysm "github.com/prysmaticlabs/prysm/v5/crypto/ecdsa"
 	"github.com/prysmaticlabs/prysm/v5/io/file"
@@ -185,4 +186,21 @@ func RetrieveColumnSubnets(m PeerManager) ([]uint64, map[uint64]struct{}, error)
 		subnetMap[s] = struct{}{}
 	}
 	return subnets, subnetMap, nil
+}
+
+func SubnetToColumns(subnet uint64) []uint64 {
+	colsPerSubnet := params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount
+	res := make([]uint64, colsPerSubnet)
+	for i := range colsPerSubnet {
+		res[i] = subnet*colsPerSubnet + i
+	}
+	return res
+}
+
+func SubnetsToColumns(subnets []uint64) []uint64 {
+	res := make([]uint64, 0)
+	for _, s := range subnets {
+		res = append(res, SubnetToColumns(s)...)
+	}
+	return res
 }

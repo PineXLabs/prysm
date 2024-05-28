@@ -159,7 +159,7 @@ func (e *cacheEntry) filter(root [32]byte, kc safeCommitmentArray) ([]blocks.ROB
 // the cache do not match those found in the block. If err is nil, then all expected
 // commitments were found in the cache and the sidecar slice return value can be used
 // to perform a DA check against the cached sidecars.
-func (e *columnCacheEntry) filter(root [32]byte, kc columnSafeCommitmentArray) ([]blocks.ROColumn, error) {
+func (e *columnCacheEntry) filter(root [32]byte, subnetFilter map[uint64]struct{}, kc columnSafeCommitmentArray) ([]blocks.ROColumn, error) {
 
 	var commitConcat []byte
 	for _, c := range kc {

@@ -652,7 +652,7 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 	if req == nil {
 		return bwc, nil
 	}
-	requestedCols := subnetsToColumns(subnets)
+	requestedCols := p2p.SubnetsToColumns(subnets)
 	req.SlotCols = make([]*p2ppb.ColumnSidecarsByRangeRequest_SlotColumns, req.Count)
 	for _, col := range req.SlotCols {
 		col.Columns = requestedCols
