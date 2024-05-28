@@ -631,11 +631,6 @@ func (f *blocksFetcher) fetchBlobsFromPeer(ctx context.Context, bwb []blocks2.Bl
 	return nil, errNoPeersAvailable
 }
 
-func (f *blocksFetcher) colSubnets() ([]uint64, error) {
-	enr := f.p2p.ENR()
-	return p2p.ColSubnets(enr)
-}
-
 // fetchColumnsFromSubnet fetches blocks from peers of subnets
 func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []blocks2.BlockWithROColumns, bestPeers []peer.ID) ([]blocks2.BlockWithROColumns, error) {
 	ctx, span := trace.StartSpan(ctx, "initialsync.fetchColumnsFromSubnet")
@@ -647,7 +642,7 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 	if err != nil {
 		return nil, err
 	}
-	subnets, err := f.colSubnets()
+	subnets, _, err := p2p.RetrieveColumnSubnets(f.p2p)
 	if err != nil {
 		return nil, err
 	}

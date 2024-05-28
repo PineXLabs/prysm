@@ -27,6 +27,7 @@ import (
 	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
+	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/crypto/rand"
 	"github.com/prysmaticlabs/prysm/v5/network/forks"
 	eth "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
@@ -400,10 +401,6 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 }
 */
 
-func (s *Service) colSubnets() ([]uint64, error) {
-	enr := s.cfg.P2P.ENR()
-	return p2p.ColSubnets(enr)
-}
 
 func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
@@ -422,7 +419,10 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	if err != nil {
 		return err
 	}
-	subnets, err := s.colSubnets()
+	subnets, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	if err != nil {
+		return err
+	}
 	reqs, err := missingColumnRequest(rob, subnets, s.cfg.ColumnStorage)
 	if err != nil {
 		return err
@@ -440,7 +440,9 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 		return err
 	}
 	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
-	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
+		return subnetMap
+	})
 	current := s.clock.CurrentSlot()
 	for _, subnet := range subnets {
 		subnetPids := peerMap[subnet]
@@ -534,7 +536,7 @@ func (s *Service) findPeersForColumns(ctx context.Context, subnets []uint64, pee
 }
 
 func (s *Service) subnetPeersSniffer(ctx context.Context) {
-	subnets, err := s.colSubnets()
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
 	if err != nil {
 		log.WithError(err).Error("sniffer get subnets failed")
 	}

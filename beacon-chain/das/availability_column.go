@@ -20,9 +20,10 @@ import (
 // This implementation will hold any blobs passed to Persist until the IsDataAvailable is called for their
 // block, at which time they will undergo full verification and be saved to the disk.
 type ColumnLazilyPersistentStore struct {
-	store    *filesystem.ColumnStorage
-	cache    *columnCache
-	verifier ColumnBatchVerifier
+	store         *filesystem.ColumnStorage
+	cache         *columnCache
+	verifier      ColumnBatchVerifier
+	filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}
 }
 
 var _ ColumnAvailabilityStore = &ColumnLazilyPersistentStore{}
@@ -38,11 +39,12 @@ type ColumnBatchVerifier interface {
 
 // NewColumnLazilyPersistentStore creates a new ColumnLazilyPersistentStore. This constructor should always be used
 // when creating a ColumnLazilyPersistentStore because it needs to initialize the cache under the hood.
-func NewColumnLazilyPersistentStore(store *filesystem.ColumnStorage, verifier ColumnBatchVerifier) *ColumnLazilyPersistentStore {
+func NewColumnLazilyPersistentStore(store *filesystem.ColumnStorage, verifier ColumnBatchVerifier, filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) *ColumnLazilyPersistentStore {
 	return &ColumnLazilyPersistentStore{
-		store:    store,
-		cache:    newColumnCache(),
-		verifier: verifier,
+		store:         store,
+		cache:         newColumnCache(),
+		verifier:      verifier,
+		filterFactory: filterFactory,
 	}
 }
 
@@ -66,7 +68,12 @@ func (s *ColumnLazilyPersistentStore) Persist(current primitives.Slot, sc ...blo
 	}
 	key := keyFromColumnSidecar(sc[0])
 	entry := s.cache.ensure(key)
+	filter := s.filterFactory(key.slot, key.root)
 	for i := range sc {
+		col := &sc[i]
+		if _, ok := filter[col.Index]; !ok {
+			continue
+		}
 		//log.Debugf("Persisting a column to cache, key.slot %d, key.root %#x, i is %d", key.slot, key.root, i)
 		if err := entry.stash(&sc[i]); err != nil {
 			return err

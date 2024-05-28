@@ -27,13 +27,14 @@ type columnSyncConfig struct {
 	store          *filesystem.ColumnStorage
 }
 
-func newColumnSync(current primitives.Slot, vbs verifiedROBlocks, cfg *columnSyncConfig) (*columnSync, error) {
+func newColumnSync(current primitives.Slot, vbs verifiedROBlocks, cfg *columnSyncConfig,
+	filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) (*columnSync, error) {
 	expected, err := vbs.columnIdents(cfg.retentionStart)
 	if err != nil {
 		return nil, err
 	}
 	cbv := newColumnBatchVerifier(cfg.ncv)
-	as := das.NewColumnLazilyPersistentStore(cfg.store, cbv)
+	as := das.NewColumnLazilyPersistentStore(cfg.store, cbv, filterFactory)
 	return &columnSync{current: current, expected: expected, cbv: cbv, store: as}, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/startup"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/verification"
+	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 )
 
 type workerId int
@@ -73,7 +74,14 @@ func (w *p2pWorker) handleBlocks(ctx context.Context, b batch) batch {
 	}
 	backfillBlocksApproximateBytes.Add(float64(bdl))
 	log.WithFields(b.logFields()).WithField("dlbytes", bdl).Debug("Backfill batch block bytes downloaded")
-	bs, err := newColumnSync(cs, vb, &columnSyncConfig{retentionStart: blobRetentionStart, ncv: w.ncv, store: w.cfs})
+	_, subnetMap, err := p2p.RetrieveColumnSubnets(w.p2p)
+	if err != nil {
+		return b.withRetryableError(err)
+	}
+
+	bs, err := newColumnSync(cs, vb, &columnSyncConfig{retentionStart: blobRetentionStart, ncv: w.ncv, store: w.cfs}, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
+		return subnetMap
+	})
 	if err != nil {
 		return b.withRetryableError(err)
 	}

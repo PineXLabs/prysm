@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/transition"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/das"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/verification"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
@@ -232,7 +233,14 @@ func (s *Service) processFetchedColumnDataRegSync(
 		return
 	}
 	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
-	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
+	_, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	if err != nil {
+		log.WithError(err).Error("get col subnets failed")
+		return
+	}
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
+		return subnetMap
+	})
 	batchFields := logrus.Fields{
 		"firstSlot":        data.bwc[0].Block.Block().Slot(),
 		"firstUnprocessed": bwc[0].Block.Block().Slot(),
@@ -478,9 +486,14 @@ func (s *Service) processBatchedBlocksWithColumns(ctx context.Context, genesis t
 		return fmt.Errorf("%w: %#x (in processBatchedBlocks, slot=%d)",
 			errParentDoesNotExist, first.Block().ParentRoot(), first.Block().Slot())
 	}
-
+	_, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	if err != nil {
+		return err
+	}
 	bc := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
-	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bc)
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bc, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
+		return subnetMap
+	})
 	s.logBatchSyncStatus(genesis, first, len(bwc))
 	for _, bb := range bwc {
 		if len(bb.Columns) == 0 {

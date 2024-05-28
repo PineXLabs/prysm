@@ -173,3 +173,16 @@ func verifyConnectivity(addr string, port uint, protocol string) {
 		}
 	}
 }
+
+func RetrieveColumnSubnets(m PeerManager) ([]uint64, map[uint64]struct{}, error) {
+	enr := m.ENR()
+	subnets, err := ColSubnets(enr)
+	if err != nil {
+		return nil, nil, err
+	}
+	subnetMap := make(map[uint64]struct{})
+	for _, s := range subnets {
+		subnetMap[s] = struct{}{}
+	}
+	return subnets, subnetMap, nil
+}
