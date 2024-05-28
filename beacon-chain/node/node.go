@@ -778,7 +778,7 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		blockchain.WithExitPool(b.exitPool),
 		blockchain.WithSlashingPool(b.slashingsPool),
 		blockchain.WithBLSToExecPool(b.blsToExecPool),
-		blockchain.WithP2PBroadcaster(b.fetchP2P()),
+		blockchain.WithP2P(b.fetchP2P()),
 		blockchain.WithStateNotifier(b),
 		blockchain.WithAttestationService(attService),
 		blockchain.WithStateGen(b.stateGen),

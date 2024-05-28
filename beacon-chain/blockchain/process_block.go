@@ -18,6 +18,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/das"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	forkchoicetypes "github.com/prysmaticlabs/prysm/v5/beacon-chain/forkchoice/types"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/config/features"
 	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
@@ -691,11 +692,11 @@ func missingIndices(bs *filesystem.BlobStorage, root [32]byte, expected [][]byte
 // It returns a map where each key represents a missing ColumnSidecar index.
 // An empty map means we have all indices; a non-empty map can be used to compare incoming
 // ColumnSidecars against the set of known missing sidecars.
-func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected [][]byte) (map[uint64]struct{}, error) {
+func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected []uint64) (map[uint64]struct{}, error) {
 	if len(expected) == 0 {
 		return nil, nil
 	}
-	if len(expected) > fieldparams.MaxBlobsPerBlock {
+	if len(expected) > fieldparams.MaxColumnsPerBlock {
 		return nil, errMaxBlobsExceeded
 	}
 	//log.Debugf("func missingColumnIndices, before cs.Indices(root), root is %s", root)
@@ -705,10 +706,9 @@ func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected 
 	}
 	//log.Debugf("func missingColumnIndices, after cs.Indices(root), len(indices) is %d", len(indices))
 	missing := make(map[uint64]struct{}, fieldparams.MaxColumnsPerBlock)
-	for i := 0; i < fieldparams.MaxColumnsPerBlock; i++ {
-		ui := uint64(i)
-		if !indices[i] {
-			missing[ui] = struct{}{}
+	for _, colIdx := range expected {
+		if !indices[colIdx] {
+			missing[colIdx] = struct{}{}
 		}
 
 	}
@@ -747,8 +747,13 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if expected == 0 {
 		return nil
 	}
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.P2p)
+	if err != nil {
+		return err
+	}
+	cols := p2p.SubnetsToColumns(subnets)
 	// get a map of ColumnSidecar indices that are not currently available.
-	missing, err := missingColumnIndices(s.columnStorage, root, kzgCommitments)
+	missing, err := missingColumnIndices(s.columnStorage, root, cols)
 	if err != nil {
 		return err
 	}

@@ -401,7 +401,6 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 }
 */
 
-
 func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
 	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
@@ -419,7 +418,7 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	if err != nil {
 		return err
 	}
-	subnets, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
 	if err != nil {
 		return err
 	}
@@ -439,9 +438,13 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	if err != nil {
 		return err
 	}
+	colMap := make(map[uint64]struct{})
+	for _, col := range p2p.SubnetsToColumns(subnets) {
+		colMap[col] = struct{}{}
+	}
 	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
 	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
-		return subnetMap
+		return colMap
 	})
 	current := s.clock.CurrentSlot()
 	for _, subnet := range subnets {

@@ -39,7 +39,8 @@ type ColumnBatchVerifier interface {
 
 // NewColumnLazilyPersistentStore creates a new ColumnLazilyPersistentStore. This constructor should always be used
 // when creating a ColumnLazilyPersistentStore because it needs to initialize the cache under the hood.
-func NewColumnLazilyPersistentStore(store *filesystem.ColumnStorage, verifier ColumnBatchVerifier, filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) *ColumnLazilyPersistentStore {
+func NewColumnLazilyPersistentStore(store *filesystem.ColumnStorage, verifier ColumnBatchVerifier,
+	filterFactory func(slot primitives.Slot, root [32]byte) map[uint64]struct{}) *ColumnLazilyPersistentStore {
 	return &ColumnLazilyPersistentStore{
 		store:         store,
 		cache:         newColumnCache(),
@@ -98,10 +99,12 @@ func (s *ColumnLazilyPersistentStore) IsDataAvailable(ctx context.Context, curre
 	entry := s.cache.ensure(key)
 	defer s.cache.delete(key)
 	root := b.Root()
+
 	// Verify we have all the expected sidecars, and fail fast if any are missing or inconsistent.
 	// We don't try to salvage problematic batches because this indicates a misbehaving peer and we'd rather
 	// ignore their response and decrease their peer score.
-	sidecars, err := entry.filter(root, blockCommitments)
+	filter := s.filterFactory(current, b.Root())
+	sidecars, err := entry.filter(root, filter, blockCommitments)
 	if err != nil {
 		return errors.Wrap(err, "incomplete ColumnSidecar batch")
 	}

@@ -74,13 +74,16 @@ func (w *p2pWorker) handleBlocks(ctx context.Context, b batch) batch {
 	}
 	backfillBlocksApproximateBytes.Add(float64(bdl))
 	log.WithFields(b.logFields()).WithField("dlbytes", bdl).Debug("Backfill batch block bytes downloaded")
-	_, subnetMap, err := p2p.RetrieveColumnSubnets(w.p2p)
+	subnets, _, err := p2p.RetrieveColumnSubnets(w.p2p)
 	if err != nil {
 		return b.withRetryableError(err)
 	}
-
+	colMap := make(map[uint64]struct{})
+	for _, col := range p2p.SubnetsToColumns(subnets) {
+		colMap[col] = struct{}{}
+	}
 	bs, err := newColumnSync(cs, vb, &columnSyncConfig{retentionStart: blobRetentionStart, ncv: w.ncv, store: w.cfs}, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
-		return subnetMap
+		return colMap
 	})
 	if err != nil {
 		return b.withRetryableError(err)

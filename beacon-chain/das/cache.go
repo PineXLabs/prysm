@@ -159,7 +159,7 @@ func (e *cacheEntry) filter(root [32]byte, kc safeCommitmentArray) ([]blocks.ROB
 // the cache do not match those found in the block. If err is nil, then all expected
 // commitments were found in the cache and the sidecar slice return value can be used
 // to perform a DA check against the cached sidecars.
-func (e *columnCacheEntry) filter(root [32]byte, subnetFilter map[uint64]struct{}, kc columnSafeCommitmentArray) ([]blocks.ROColumn, error) {
+func (e *columnCacheEntry) filter(root [32]byte, columFilter map[uint64]struct{}, kc columnSafeCommitmentArray) ([]blocks.ROColumn, error) {
 
 	var commitConcat []byte
 	for _, c := range kc {
@@ -167,17 +167,19 @@ func (e *columnCacheEntry) filter(root [32]byte, subnetFilter map[uint64]struct{
 	}
 	commitmentsHash := hash.Hash(commitConcat)
 
-	scs := make([]blocks.ROColumn, fieldparams.MaxColumnsPerBlock)
+	scs := make([]blocks.ROColumn, 0)
 	for i := uint64(0); i < fieldparams.MaxColumnsPerBlock; i++ {
+		if _, ok := columFilter[i]; !ok {
+			continue
+		}
 		if e.scs[i] == nil {
 			return nil, errors.Wrapf(errMissingColumnSidecar, "root=%#x, index=%#x", root, i)
 		}
 		if !bytes.Equal(commitmentsHash[:], e.scs[i].CommitmentsHash) { //todo: compare commitments one by one directly?
 			return nil, errors.Wrapf(errCommitmentsHashMismatch, "root=%#x, index=%#x, commitmentsHash=%#x, the calculated hash of block commitments=%#x", root, i, e.scs[i].CommitmentsHash, commitmentsHash)
 		}
-		scs[i] = *e.scs[i]
+		scs = append(scs, *e.scs[i])
 	}
-
 	return scs, nil
 }
 

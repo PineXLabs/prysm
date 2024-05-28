@@ -233,13 +233,17 @@ func (s *Service) processFetchedColumnDataRegSync(
 		return
 	}
 	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
-	_, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
 	if err != nil {
 		log.WithError(err).Error("get col subnets failed")
 		return
 	}
+	colMap := make(map[uint64]struct{})
+	for _, col := range p2p.SubnetsToColumns(subnets) {
+		colMap[col] = struct{}{}
+	}
 	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
-		return subnetMap
+		return colMap
 	})
 	batchFields := logrus.Fields{
 		"firstSlot":        data.bwc[0].Block.Block().Slot(),
@@ -486,13 +490,17 @@ func (s *Service) processBatchedBlocksWithColumns(ctx context.Context, genesis t
 		return fmt.Errorf("%w: %#x (in processBatchedBlocks, slot=%d)",
 			errParentDoesNotExist, first.Block().ParentRoot(), first.Block().Slot())
 	}
-	_, subnetMap, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.P2P)
 	if err != nil {
 		return err
 	}
 	bc := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
+	colMap := make(map[uint64]struct{})
+	for _, col := range p2p.SubnetsToColumns(subnets) {
+		colMap[col] = struct{}{}
+	}
 	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bc, func(slot primitives.Slot, root [32]byte) map[uint64]struct{} {
-		return subnetMap
+		return colMap
 	})
 	s.logBatchSyncStatus(genesis, first, len(bwc))
 	for _, bb := range bwc {

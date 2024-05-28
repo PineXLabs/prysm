@@ -84,7 +84,7 @@ type config struct {
 	ExitPool                voluntaryexits.PoolManager
 	SlashingPool            slashings.PoolManager
 	BLSToExecPool           blstoexec.PoolManager
-	P2p                     p2p.Broadcaster
+	P2p                     p2p.P2P
 	MaxRoutines             int
 	StateNotifier           statefeed.Notifier
 	ForkChoiceStore         f.ForkChoicer
