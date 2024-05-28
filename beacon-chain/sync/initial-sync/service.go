@@ -24,7 +24,6 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/verification"
 	"github.com/prysmaticlabs/prysm/v5/cmd/beacon-chain/flags"
-	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
@@ -315,7 +314,7 @@ func missingBlobRequest(blk blocks.ROBlock, store *filesystem.BlobStorage) (p2pt
 	return req, nil
 }
 
-func missingColumnRequest(blk blocks.ROBlock, subnets []uint64, store *filesystem.ColumnStorage) (p2ptypes.ColumnSidecarsByRootReq, error) {
+func missingColumnRequest(blk blocks.ROBlock, requiredColumns []uint64, store *filesystem.ColumnStorage) (p2ptypes.ColumnSidecarsByRootReq, error) {
 	r := blk.Root()
 	if blk.Version() < version.Deneb {
 		return nil, nil
@@ -332,19 +331,13 @@ func missingColumnRequest(blk blocks.ROBlock, subnets []uint64, store *filesyste
 	if err != nil {
 		return nil, errors.Wrapf(err, "error checking existing blobs for checkpoint sync block root %#x", r)
 	}
-	req := make(p2ptypes.ColumnSidecarsByRootReq, 0, fieldparams.MaxColumnsPerBlock)
-	colRequired := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
-	for _, subnet := range subnets {
-		cols := []uint64{}
-		for i := range colRequired {
-			cols = append(cols, colRequired*subnet+i)
+	req := make(p2ptypes.ColumnSidecarsByRootReq, 0)
+	for _, colIndex := range requiredColumns {
+		if onDisk[colIndex] {
+			continue
 		}
-		for _, col := range cols {
-			if onDisk[col] {
-				continue
-			}
-			req = append(req, &eth.ColumnIdentifier{BlockRoot: r[:], Index: col})
-		}
+		req = append(req, &eth.ColumnIdentifier{BlockRoot: r[:], Index: colIndex})
+
 	}
 	return req, nil
 }
@@ -422,7 +415,8 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	if err != nil {
 		return err
 	}
-	reqs, err := missingColumnRequest(rob, subnets, s.cfg.ColumnStorage)
+	cols := p2p.SubnetsToColumns(subnets)
+	reqs, err := missingColumnRequest(rob, cols, s.cfg.ColumnStorage)
 	if err != nil {
 		return err
 	}

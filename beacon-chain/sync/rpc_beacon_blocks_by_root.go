@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/execution"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p/types"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync/verify"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/verification"
@@ -234,7 +235,12 @@ func (s *Service) pendingColumnsRequestForBlock(root [32]byte, b interfaces.Read
 	if len(cc) == 0 {
 		return nil, nil
 	}
-	return s.constructPendingColumnsRequest(root, len(cc))
+	subnets, _, err := p2p.RetrieveColumnSubnets(s.cfg.p2p)
+	if err != nil {
+		return nil, err
+	}
+	cols := p2p.SubnetsToColumns(subnets)
+	return s.constructPendingColumnsRequest(root, cols)
 }
 
 // constructPendingBlobsRequest creates a request for BlobSidecars by root, considering blobs already in DB.
@@ -251,8 +257,8 @@ func (s *Service) constructPendingBlobsRequest(root [32]byte, commitments int) (
 }
 
 // constructPendingColumnsRequest creates a request for ColumnSidecars by root, considering columns already in DB.
-func (s *Service) constructPendingColumnsRequest(root [32]byte, commitments int) (types.ColumnSidecarsByRootReq, error) {
-	if commitments == 0 {
+func (s *Service) constructPendingColumnsRequest(root [32]byte, required []uint64) (types.ColumnSidecarsByRootReq, error) {
+	if len(required) == 0 {
 		return nil, nil
 	}
 	stored, err := s.cfg.columnStorage.Indices(root)
@@ -260,7 +266,7 @@ func (s *Service) constructPendingColumnsRequest(root [32]byte, commitments int)
 		return nil, err
 	}
 
-	return requestsForMissingColumnIndices(stored, commitments, root), nil
+	return requestsForMissingColumnIndices(stored, required, root), nil
 }
 
 // requestsForMissingIndices constructs a slice of BlobIdentifiers that are missing from
@@ -279,11 +285,11 @@ func requestsForMissingIndices(storedIndices [fieldparams.MaxBlobsPerBlock]bool,
 // requestsForMissingColumnIndices constructs a slice of ColumnIdentifiers that are missing from
 // local storage, based on a mapping that represents which indices are locally stored,
 // and the highest expected index.
-func requestsForMissingColumnIndices(storedIndices [fieldparams.MaxColumnsPerBlock]bool, commitments int, root [32]byte) []*eth.ColumnIdentifier {
+func requestsForMissingColumnIndices(storedIndices [fieldparams.MaxColumnsPerBlock]bool, required []uint64, root [32]byte) []*eth.ColumnIdentifier {
 	var ids []*eth.ColumnIdentifier
-	for i := uint64(0); i < uint64(commitments); i++ {
-		if !storedIndices[i] {
-			ids = append(ids, &eth.ColumnIdentifier{Index: i, BlockRoot: root[:]})
+	for _, r := range required {
+		if !storedIndices[r] {
+			ids = append(ids, &eth.ColumnIdentifier{Index: r, BlockRoot: root[:]})
 		}
 	}
 	return ids
