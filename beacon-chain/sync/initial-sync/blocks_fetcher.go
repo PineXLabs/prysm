@@ -17,7 +17,6 @@ import (
 	prysmsync "github.com/prysmaticlabs/prysm/v5/beacon-chain/sync"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync/verify"
 	"github.com/prysmaticlabs/prysm/v5/cmd/beacon-chain/flags"
-	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	consensus_types "github.com/prysmaticlabs/prysm/v5/consensus-types"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
@@ -27,6 +26,7 @@ import (
 	leakybucket "github.com/prysmaticlabs/prysm/v5/container/leaky-bucket"
 	"github.com/prysmaticlabs/prysm/v5/crypto/rand"
 	"github.com/prysmaticlabs/prysm/v5/math"
+	"github.com/prysmaticlabs/prysm/v5/network/forks"
 	p2ppb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
@@ -318,7 +318,7 @@ func (f *blocksFetcher) handleRequest(ctx context.Context, start primitives.Slot
 
 	response.bwc, response.pid, response.err = f.fetchBlocksFromPeer(ctx, start, count, peers)
 	if response.err == nil {
-		bwc, err := f.fetchColumnsFromPeer(ctx, response.bwc, response.pid, peers)
+		bwc, err := f.fetchColumnsFromSubnets(ctx, response.bwc, peers)
 		if err != nil {
 			log.Errorf("fetchColumnsFromPeer failed, error is %s", err.Error())
 			response.err = err
@@ -539,55 +539,40 @@ func verifyAndPopulateBlobs(bwb []blocks2.BlockWithROBlobs, blobs []blocks.ROBlo
 	return bwb, nil
 }
 
-func verifyAndPopulateColumns(bwc []blocks2.BlockWithROColumns, columns []blocks.ROColumn, columnWindowStart primitives.Slot) ([]blocks2.BlockWithROColumns, error) {
+func verifyAndPopulateColumns(bwm map[primitives.Slot]*blocks2.BlockWithROColumns, columns []blocks.ROColumn, startColumnIndex uint64, columnWindowStart primitives.Slot) error {
 	// Assumes bwc has already been sorted by sortedBlockWithVerifiedColumnSlice.
 	columns = sortColumns(columns)
-	columni := 0
-	// Loop over all blocks, and each time a commitment is observed, advance the index into the blob slice.
-	// The assumption is that the blob slice contains a value for every commitment in the blocks it is based on,
-	// correctly ordered by slot and blob index.
-	for i, bb := range bwc {
-		block := bb.Block.Block()
-		if block.Slot() < columnWindowStart {
+	columnNums := params.BeaconConfig().BeaconColumnSubnetCustodyRequired * (params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount)
+	for i := range columns {
+		column := &columns[i]
+		if column.Index < startColumnIndex || column.Index > startColumnIndex+columnNums {
+			log.WithError(errors.New("column index out of range")).Error("bad column index received")
 			continue
 		}
-		commitments, err := block.Body().BlobKzgCommitments()
-		if err != nil {
-			if errors.Is(err, consensus_types.ErrUnsupportedField) {
-				log.
-					WithField("blockSlot", block.Slot()).
-					WithField("retentionStart", columnWindowStart).
-					Warn("block with slot within column retention period has version which does not support commitments")
+		offsetColumnIndex := column.Index - startColumnIndex
+		if bwc, ok := bwm[column.Slot()]; ok && bwc.Block.Root() == column.BlockRoot() {
+			block := bwc.Block.Block()
+			if bwc.Columns == nil {
+				bwc.Columns = make([]blocks2.ROColumn, columnNums)
+			}
+			// we already have this column, ignore
+			if bwc.Columns[offsetColumnIndex].ColumnSidecar != nil {
 				continue
 			}
-			return nil, err
-		}
-		if len(commitments) == 0 {
-			continue
-		}
-		bb.Columns = make([]blocks.ROColumn, fieldparams.MaxColumnsPerBlock)
-		existed := make(map[uint64]bool, fieldparams.MaxColumnsPerBlock)
-		for ci := 0; ci < fieldparams.MaxColumnsPerBlock; ci++ {
-			// There are more expected columns in this block, but we've run out of columns from the response
-			// (out-of-bound error guard).
-			if columni == len(columns) {
-				return nil, missingColumnError(bb.Block.Root(), bb.Block.Block().Slot())
+			// actually the error was checked in the caller function
+			// so the err should always be nil
+			commitments, err := block.Body().BlobKzgCommitments()
+			if err != nil {
+				log.WithError(err).Fatal("get commitment from block failed")
 			}
-			cl := columns[columni]
-			if err := verify.ColumnAlignsWithBlock(cl, bb.Block); err != nil {
-				log.Errorf("verify.ColumnAlignsWithBlock err is %s", err.Error())
-				return nil, err
+			err = checkColumnCommitments(column, commitments)
+			if err != nil {
+				return err
 			}
-			if existed[cl.Index] {
-				continue
-			}
-			bb.Columns[cl.Index] = cl
-			columni += 1
-			existed[cl.Index] = true
+			bwc.Columns[offsetColumnIndex] = *column
 		}
-		bwc[i] = bb
 	}
-	return bwc, nil
+	return nil
 }
 
 func missingCommitError(root [32]byte, slot primitives.Slot, missing [][]byte) error {
@@ -646,9 +631,14 @@ func (f *blocksFetcher) fetchBlobsFromPeer(ctx context.Context, bwb []blocks2.Bl
 	return nil, errNoPeersAvailable
 }
 
-// fetchColumnsFromPeer fetches blocks from a single randomly selected peer.
-func (f *blocksFetcher) fetchColumnsFromPeer(ctx context.Context, bwc []blocks2.BlockWithROColumns, pid peer.ID, peers []peer.ID) ([]blocks2.BlockWithROColumns, error) {
-	ctx, span := trace.StartSpan(ctx, "initialsync.fetchColumnsFromPeer")
+func (f *blocksFetcher) colSubnets() ([]uint64, error) {
+	enr := f.p2p.ENR()
+	return p2p.ColSubnets(enr)
+}
+
+// fetchColumnsFromSubnet fetches blocks from peers of subnets
+func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []blocks2.BlockWithROColumns, bestPeers []peer.ID) ([]blocks2.BlockWithROColumns, error) {
+	ctx, span := trace.StartSpan(ctx, "initialsync.fetchColumnsFromSubnet")
 	defer span.End()
 	if slots.ToEpoch(f.clock.CurrentSlot()) < params.BeaconConfig().DenebForkEpoch {
 		return bwc, nil
@@ -657,44 +647,99 @@ func (f *blocksFetcher) fetchColumnsFromPeer(ctx context.Context, bwc []blocks2.
 	if err != nil {
 		return nil, err
 	}
+	subnets, err := f.colSubnets()
+	if err != nil {
+		return nil, err
+	}
+
 	// Construct request message based on observed interval of blocks in need of columns.
 	req := columnRequest(bwc, columnWindowStart)
 	if req == nil {
 		return bwc, nil
 	}
-
-	//log.Debugf("in fetchColumnsFromPeer, req.StartSlot %d, req.Count %d", req.StartSlot, req.Count)
-
-	//if len(bwc) > 0 {
-	//	for i, c := range bwc {
-	//		log.Debugf("in fetchColumnsFromPeer, bwc[%d].Block.Block().Slot() %d", i, c.Block.Block().Slot())
-	//	}
-	//}
-
-	peers = f.filterPeers(ctx, peers, peersPercentagePerRequest)
-	// We dial the initial peer first to ensure that we get the desired set of blobs.
-	wantedPeers := append([]peer.ID{pid}, peers...)
-	bestPeers := f.hasSufficientBandwidth(wantedPeers, req.Count)
-	// We append the best peers to the front so that higher capacity
-	// peers are dialed first. If all of them fail, we fallback to the
-	// initial peer we wanted to request blobs from.
-	peers = append(bestPeers, pid)
-	for i := 0; i < len(peers); i++ {
-		p := peers[i]
-		columns, err := f.requestColumns(ctx, req, p)
-		if err != nil {
-			log.WithField("peer", p).WithError(err).Debug("Could not request columns by range from peer")
-			continue
-		}
-		f.p2p.Peers().Scorers().BlockProviderScorer().Touch(p)
-		rocs, err := verifyAndPopulateColumns(bwc, columns, columnWindowStart)
-		if err != nil {
-			log.WithField("peer", p).WithError(err).Debug("Invalid BeaconColumnsByRange response")
-			continue
-		}
-		return rocs, err
+	requestedCols := subnetsToColumns(subnets)
+	req.SlotCols = make([]*p2ppb.ColumnSidecarsByRangeRequest_SlotColumns, req.Count)
+	for _, col := range req.SlotCols {
+		col.Columns = requestedCols
 	}
-	return nil, errNoPeersAvailable
+	startColumnIndex := requestedCols[0]
+	genRoot := f.clock.GenesisValidatorsRoot()
+	digest, err := forks.CreateForkDigest(f.clock.GenesisTime(), genRoot[:])
+	if err != nil {
+		return nil, err
+	}
+	bwm := make(map[primitives.Slot]*blocks2.BlockWithROColumns)
+	for i := range bwc {
+		b := &bwc[i]
+		block := b.Block.Block()
+		if block.Slot() < columnWindowStart {
+			continue
+		}
+		commitments, err := block.Body().BlobKzgCommitments()
+		if err != nil {
+			if errors.Is(err, consensus_types.ErrUnsupportedField) {
+				log.
+					WithField("blockSlot", block.Slot()).
+					WithField("retentionStart", columnWindowStart).
+					Warn("block with slot within column retention period has version which does not support commitments")
+				continue
+			}
+			return nil, err
+		}
+		if len(commitments) == 0 {
+			continue
+		}
+		bwm[b.Block.Block().Slot()] = b
+	}
+	var subnet = subnets[0]
+	var lastSubnet = subnets[len(subnets)-1]
+	for {
+		if subnet > lastSubnet {
+			break
+		}
+		topic := fmt.Sprintf(p2p.ColumnSubnetTopicFormat, digest, subnet)
+		topicPeers := f.p2p.PubSub().ListPeers(topic)
+		peers := f.filterPeers(ctx, topicPeers, peersPercentagePerRequest)
+		peers = f.hasSufficientBandwidth(peers, req.Count)
+		// 0 peers remained, we'll try unfiltered peers
+		if len(peers) == 0 {
+			peers = f.p2p.PubSub().ListPeers(topic)
+			// we fallback to the peers that we used in block requests
+			// hope we have luck
+			if len(peers) == 0 {
+				peers = bestPeers
+			}
+		}
+		fullfilt := false
+		for j := 0; j < len(peers); j++ {
+			p := peers[j]
+			columns, err := f.requestColumns(ctx, req, p)
+			if err != nil {
+				log.WithField("peer", p).WithError(err).Debug("Could not request columns by range from peer")
+				continue
+			}
+			f.p2p.Peers().Scorers().BlockProviderScorer().Touch(p)
+			err = verifyAndPopulateColumns(bwm, columns, startColumnIndex, columnWindowStart)
+			if err != nil {
+				return nil, err
+			}
+			lowestSubnet := refreshReqAndLowestSubnet(req, bwm)
+			if n := lowestSubnet - subnet; n > 0 {
+				// lowestSubnet not equal to subnet
+				// which means current subnet's requirement has been fullfilt
+				// we can just skip to next subnet
+				subnet = lowestSubnet
+				fullfilt = true
+				break
+			}
+		}
+		if !fullfilt {
+			// we cannot get all of the columns of this subnet
+			// for not being blocked here, we shall just move on
+			subnet += 1
+		}
+	}
+	return bwc, err
 }
 
 // requestBlocks is a wrapper for handling BeaconBlocksByRangeRequest requests/streams.

@@ -205,10 +205,11 @@ func (s *Service) Start() {
 			return
 		}
 		s.dv5Listener = listener
-		go s.listenForNewNodes()
+		s.RefreshENR()
+		go func() {
+			s.listenForNewNodes()
+		}()
 	}
-
-	s.started = true
 
 	if len(s.cfg.StaticPeers) > 0 {
 		addrs, err := PeersFromStringAddrs(s.cfg.StaticPeers)
@@ -222,7 +223,8 @@ func (s *Service) Start() {
 	}
 	// Initialize metadata according to the
 	// current epoch.
-	s.RefreshENR()
+
+	s.started = true
 
 	// Periodic functions.
 	async.RunEvery(s.ctx, params.BeaconConfig().TtfbTimeoutDuration(), func() {

@@ -28,6 +28,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/crypto/rand"
+	"github.com/prysmaticlabs/prysm/v5/network/forks"
 	eth "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/runtime"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
@@ -190,12 +191,17 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Failed to fetch missing columns for checkpoint origin")
 		return
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	// run the sniffer to find column subnet peers
+	// and cancel it right after the init sync is done
+	go s.subnetPeersSniffer(ctx)
 	if err := s.roundRobinSync(gt); err != nil {
 		if errors.Is(s.ctx.Err(), context.Canceled) {
 			return
 		}
 		panic(err)
 	}
+	cancel()
 	log.WithField("slot", s.cfg.Chain.HeadSlot()).Info("Synced up to")
 	s.markSynced()
 }
@@ -308,7 +314,7 @@ func missingBlobRequest(blk blocks.ROBlock, store *filesystem.BlobStorage) (p2pt
 	return req, nil
 }
 
-func missingColumnRequest(blk blocks.ROBlock, store *filesystem.ColumnStorage) (p2ptypes.ColumnSidecarsByRootReq, error) {
+func missingColumnRequest(blk blocks.ROBlock, subnets []uint64, store *filesystem.ColumnStorage) (p2ptypes.ColumnSidecarsByRootReq, error) {
 	r := blk.Root()
 	if blk.Version() < version.Deneb {
 		return nil, nil
@@ -326,11 +332,18 @@ func missingColumnRequest(blk blocks.ROBlock, store *filesystem.ColumnStorage) (
 		return nil, errors.Wrapf(err, "error checking existing blobs for checkpoint sync block root %#x", r)
 	}
 	req := make(p2ptypes.ColumnSidecarsByRootReq, 0, fieldparams.MaxColumnsPerBlock)
-	for i := range cmts {
-		if onDisk[i] {
-			continue
+	colRequired := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
+	for _, subnet := range subnets {
+		cols := []uint64{}
+		for i := range colRequired {
+			cols = append(cols, colRequired*subnet+i)
 		}
-		req = append(req, &eth.ColumnIdentifier{BlockRoot: r[:], Index: uint64(i)})
+		for _, col := range cols {
+			if onDisk[col] {
+				continue
+			}
+			req = append(req, &eth.ColumnIdentifier{BlockRoot: r[:], Index: col})
+		}
 	}
 	return req, nil
 }
@@ -387,6 +400,11 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 }
 */
 
+func (s *Service) colSubnets() ([]uint64, error) {
+	enr := s.cfg.P2P.ENR()
+	return p2p.ColSubnets(enr)
+}
+
 func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
 	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
@@ -404,37 +422,146 @@ func (s *Service) fetchOriginColumns(pids []peer.ID) error {
 	if err != nil {
 		return err
 	}
-	req, err := missingColumnRequest(rob, s.cfg.ColumnStorage)
+	subnets, err := s.colSubnets()
+	reqs, err := missingColumnRequest(rob, subnets, s.cfg.ColumnStorage)
 	if err != nil {
 		return err
 	}
-	if len(req) == 0 {
+	if len(reqs) == 0 {
 		log.WithField("root", fmt.Sprintf("%#x", r)).Debug("All columns for checkpoint block are present")
 		return nil
 	}
-	shufflePeers(pids)
-	for i := range pids {
-		sidecars, err := sync.SendColumnSidecarByRoot(s.ctx, s.clock, s.cfg.P2P, pids[i], s.ctxMap, &req)
-		if err != nil {
-			continue
-		}
-		if len(sidecars) != len(req) {
-			continue
-		}
-		bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
-		avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
-		current := s.clock.CurrentSlot()
-		if err := avs.Persist(current, sidecars...); err != nil {
-			return err
-		}
-		if err := avs.IsDataAvailable(s.ctx, current, rob); err != nil {
-			log.WithField("root", fmt.Sprintf("%#x", r)).WithField("peerID", pids[i]).Warn("Columns from peer for origin block were unusable")
-			continue
-		}
-		log.WithField("nColumns", len(sidecars)).WithField("root", fmt.Sprintf("%#x", r)).Info("Successfully downloaded blobs for checkpoint sync block")
-		return nil
+	reqMap := map[uint64]*eth.ColumnIdentifier{}
+	for _, r := range reqs {
+		reqMap[r.Index] = r
 	}
-	return fmt.Errorf("no connected peer able to provide columns for checkpoint sync block %#x", r)
+	peerMap, err := s.findPeersForColumns(s.ctx, subnets, pids)
+	if err != nil {
+		return err
+	}
+	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
+	current := s.clock.CurrentSlot()
+	for _, subnet := range subnets {
+		subnetPids := peerMap[subnet]
+		// if we cannot find peers in specific subnet
+		// we fall back to random pids to try luck
+		if len(subnetPids) == 0 {
+			subnetPids = pids
+		}
+		shufflePeers(subnetPids)
+		for i := range subnetPids {
+			// send all needed column identifier to peer,
+			// in case these peers custody more columns than required
+			sidecars, err := sync.SendColumnSidecarByRoot(s.ctx, s.clock, s.cfg.P2P, subnetPids[i], s.ctxMap, &reqs)
+			if err != nil {
+				continue
+			}
+			if err := avs.Persist(current, sidecars...); err != nil {
+				return err
+			}
+			// filter received columns from req
+			newReq := p2ptypes.ColumnSidecarsByRootReq{}
+			for _, sidecar := range sidecars {
+				col := sidecar.Index
+				delete(reqMap, col)
+			}
+			for _, r := range reqMap {
+				newReq = append(newReq, r)
+			}
+			reqs = newReq
+		}
+	}
+	if err := avs.IsDataAvailable(s.ctx, current, rob); err != nil {
+		log.WithField("root", fmt.Sprintf("%#x", r)).Warn("Columns from peer for origin block were unusable")
+		return fmt.Errorf("no connected peer able to provide columns for checkpoint sync block %#x", r)
+	}
+	log.WithField("nColumns", len(subnets)).WithField("root", fmt.Sprintf("%#x", r)).Info("Successfully downloaded blobs for checkpoint sync block")
+	return nil
+
+}
+
+func (s *Service) currentForkDigest() ([4]byte, error) {
+	genRoot := s.clock.GenesisValidatorsRoot()
+	return forks.CreateForkDigest(s.clock.GenesisTime(), genRoot[:])
+}
+
+func (s *Service) findPeersForColumns(ctx context.Context, subnets []uint64, peers []peer.ID) (map[uint64][]peer.ID, error) {
+	digest, err := s.currentForkDigest()
+	if err != nil {
+		return nil, err
+	}
+	subnetMap := make(map[uint64][]peer.ID)
+	for _, subnet := range subnets {
+		subnetMap[subnet] = make([]peer.ID, 0)
+	}
+	status := s.cfg.P2P.Peers()
+
+	for _, peer := range peers {
+		rcd, err := status.ENR(peer)
+		if err != nil {
+			log.WithError(err).WithField("id", peer).Error("can not retrieve peer record")
+			continue
+		}
+		peerSubnets, err := p2p.ColSubnets(rcd)
+		if err != nil {
+			log.WithError(err).WithField("id", peer).Error("can not retrieve peer column subnet bitvector")
+			continue
+		}
+		for _, peerSubnet := range peerSubnets {
+			if _, ok := subnetMap[peerSubnet]; ok {
+				subnetMap[peerSubnet] = append(subnetMap[peerSubnet], peer)
+			}
+		}
+	}
+	for subnet, peerIDs := range subnetMap {
+		if len(peerIDs) == 0 {
+			topic := fmt.Sprintf(p2p.ColumnSubnetTopicFormat, digest, subnet)
+			// procedure will end in 5s anyway
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			found, err := s.cfg.P2P.FindPeersWithSubnet(ctx, topic, subnet, flags.Get().MinimumPeersPerSubnet)
+			// cancel the context to release the resource
+			cancel()
+			if err != nil || !found {
+				log.WithField("column index", subnet).Error("can not find peers for column subnet")
+				continue
+			}
+			subnetPeers := s.cfg.P2P.PubSub().ListPeers(topic)
+			subnetMap[subnet] = append(subnetMap[subnet], subnetPeers...)
+		}
+	}
+	return subnetMap, nil
+}
+
+func (s *Service) subnetPeersSniffer(ctx context.Context) {
+	subnets, err := s.colSubnets()
+	if err != nil {
+		log.WithError(err).Error("sniffer get subnets failed")
+	}
+	digest, err := s.currentForkDigest()
+	if err != nil {
+		log.WithError(err).Error("sniffer get current for digest failed")
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		for _, subnet := range subnets {
+			topic := fmt.Sprintf(p2p.ColumnSubnetTopicFormat, digest, subnet)
+			// procedure will end in 5s anyway
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			found, err := s.cfg.P2P.FindPeersWithSubnet(ctx, topic, subnet, flags.Get().MinimumPeersPerSubnet)
+			// cancel the context to release the resource
+			cancel()
+			if err != nil || !found {
+				log.WithField("column index", subnet).Error("can not find peers for column subnet")
+			}
+		}
+		// wait for 5 second any way after the loop
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func shufflePeers(pids []peer.ID) {

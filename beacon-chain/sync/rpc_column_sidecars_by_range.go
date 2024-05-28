@@ -19,7 +19,7 @@ import (
 	"go.opencensus.io/trace"
 )
 
-func (s *Service) streamColumnBatch(ctx context.Context, batch blockBatch, wQuota uint64, stream libp2pcore.Stream) (uint64, error) {
+func (s *Service) streamColumnBatch(ctx context.Context, batch blockBatch, requiredMap map[primitives.Slot][]uint64, wQuota uint64, stream libp2pcore.Stream) (uint64, error) {
 	// Defensive check to guard against underflow.
 	if wQuota == 0 {
 		return 0, nil
@@ -28,6 +28,15 @@ func (s *Service) streamColumnBatch(ctx context.Context, batch blockBatch, wQuot
 	defer span.End()
 	for _, b := range batch.canonical() {
 		root := b.Root()
+		slot := b.Block().Slot()
+		required, ok := requiredMap[slot]
+		if !ok || len(required) == 0 {
+			continue
+		}
+		filter := make(map[uint64]struct{})
+		for _, col := range required {
+			filter[col] = struct{}{}
+		}
 		idxs, err := s.cfg.columnStorage.Indices(b.Root())
 		if err != nil {
 			s.writeErrorResponseToStream(responseCodeServerError, p2ptypes.ErrGeneric.Error(), stream)
@@ -36,6 +45,10 @@ func (s *Service) streamColumnBatch(ctx context.Context, batch blockBatch, wQuot
 		for i, l := uint64(0), uint64(len(idxs)); i < l; i++ {
 			// index not available, skip
 			if !idxs[i] {
+				continue
+			}
+			// not required, skip
+			if _, ok := filter[i]; !ok {
 				continue
 			}
 			// We won't check for file not found since the .Indices method should normally prevent that from happening.
@@ -98,12 +111,15 @@ func (s *Service) columnSidecarsByRangeRPCHandler(ctx context.Context, msg inter
 		tracing.AnnotateError(span, err)
 		return err
 	}
-
+	requiredMap := make(map[primitives.Slot][]uint64)
+	for i, required := range r.SlotCols {
+		requiredMap[primitives.Slot(i)+r.StartSlot] = required.Columns
+	}
 	var batch blockBatch
 	wQuota := params.BeaconConfig().MaxRequestColumnSidecars
 	for batch, ok = batcher.next(ctx, stream); ok; batch, ok = batcher.next(ctx, stream) {
 		batchStart := time.Now()
-		wQuota, err = s.streamColumnBatch(ctx, batch, wQuota, stream)
+		wQuota, err = s.streamColumnBatch(ctx, batch, requiredMap, wQuota, stream)
 		rpcColumnsByRangeResponseLatency.Observe(float64(time.Since(batchStart).Milliseconds()))
 		if err != nil {
 			log.WithError(err).Info("in columnSidecarsByRangeRPCHandler, streamColumnBatch")

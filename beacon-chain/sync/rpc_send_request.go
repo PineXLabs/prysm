@@ -191,7 +191,8 @@ func SendBlobsByRangeRequest(ctx context.Context, tor blockchain.TemporalOracle,
 	return readChunkEncodedBlobs(stream, p2pApi.Encoding(), ctxMap, composeBlobValidations(vfuncs...), max)
 }
 
-func SendColumnsByRangeRequest(ctx context.Context, tor blockchain.TemporalOracle, p2pApi p2p.SenderEncoder, pid peer.ID, ctxMap ContextByteVersions, req *pb.ColumnSidecarsByRangeRequest, bvs ...ColumnResponseValidation) ([]blocks.ROColumn, error) {
+func SendColumnsByRangeRequest(ctx context.Context, tor blockchain.TemporalOracle, p2pApi p2p.SenderEncoder,
+	pid peer.ID, ctxMap ContextByteVersions, req *pb.ColumnSidecarsByRangeRequest, bvs ...ColumnResponseValidation) ([]blocks.ROColumn, error) {
 	topic, err := p2p.TopicFromMessage(p2p.ColumnSidecarsByRangeName, slots.ToEpoch(tor.CurrentSlot()))
 	if err != nil {
 		return nil, err

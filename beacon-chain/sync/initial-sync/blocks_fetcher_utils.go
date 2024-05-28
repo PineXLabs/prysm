@@ -7,11 +7,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	p2pTypes "github.com/prysmaticlabs/prysm/v5/beacon-chain/p2p/types"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync/verify"
 	"github.com/prysmaticlabs/prysm/v5/cmd/beacon-chain/flags"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	p2ppb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
@@ -281,7 +283,7 @@ func (f *blocksFetcher) findForkWithPeer(ctx context.Context, pid peer.ID, slot 
 		}
 		// We need to fetch the columns for the given alt-chain if any exist, so that we can try to verify and import
 		// the blocks.
-		bwc, err := f.fetchColumnsFromPeer(ctx, altBlocks, pid, []peer.ID{pid})
+		bwc, err := f.fetchColumnsFromSubnets(ctx, altBlocks, []peer.ID{pid})
 		if err != nil {
 			return nil, errors.Wrap(err, "unable to retrieve blobs for blocks found in findForkWithPeer")
 		}
@@ -303,7 +305,7 @@ func (f *blocksFetcher) findAncestor(ctx context.Context, pid peer.ID, b interfa
 			if err != nil {
 				return nil, errors.Wrap(err, "received invalid blocks in findAncestor")
 			}
-			bwc, err = f.fetchColumnsFromPeer(ctx, bwc, pid, []peer.ID{pid})
+			bwc, err = f.fetchColumnsFromSubnets(ctx, bwc, []peer.ID{pid})
 			if err != nil {
 				return nil, errors.Wrap(err, "unable to retrieve columns for blocks found in findAncestor")
 			}
@@ -353,4 +355,70 @@ func (f *blocksFetcher) calculateHeadAndTargetEpochs() (headEpoch, targetEpoch p
 		targetEpoch, peers = f.p2p.Peers().BestNonFinalized(flags.Get().MinimumSyncPeers, headEpoch)
 	}
 	return headEpoch, targetEpoch, peers
+}
+
+func subnetToColumns(subnet uint64) []uint64 {
+	colsPerSubnet := params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount
+	res := make([]uint64, colsPerSubnet)
+	for i := range colsPerSubnet {
+		res[i] = subnet*colsPerSubnet + i
+	}
+	return res
+}
+
+func subnetsToColumns(subnets []uint64) []uint64 {
+	res := make([]uint64, 0)
+	for _, s := range subnets {
+		res = append(res, subnetToColumns(s)...)
+	}
+	return res
+}
+
+func colToSubnet(idx uint64) uint64 {
+	colsPerSubnet := params.BeaconConfig().ColumnCount / params.BeaconConfig().ColumnsidecarSubnetCount
+	return idx / colsPerSubnet
+}
+
+func checkColumnCommitments(column *blocks.ROColumn, commits [][]byte) error {
+	if len(column.BlobKzgCommitments) != len(commits) {
+		return errors.Wrapf(verify.ErrMismatchedCommitmentsCount,
+			"column commitments count %#x != block commitments count %#x, for block root %#x at slot %d ",
+			len(column.BlobKzgCommitments), len(commits), column.BlockRoot(), column.Slot())
+	}
+	for i := 0; i < len(column.BlobKzgCommitments); i++ {
+		blockCommitment := bytesutil.ToBytes48(commits[i])
+		blobCommitment := bytesutil.ToBytes48(column.BlobKzgCommitments[i])
+		if blobCommitment != blockCommitment {
+			return errors.Wrapf(verify.ErrMismatchedColumnCommitments,
+				"commitment %#x != block commitment %#x, at index %d for block root %#x at slot %d ",
+				blobCommitment, blockCommitment, column.Index, column.BlockRoot(), column.Slot())
+		}
+	}
+	return nil
+}
+
+func refreshReqAndLowestSubnet(req *p2ppb.ColumnSidecarsByRangeRequest, bwm map[primitives.Slot]*blocks.BlockWithROColumns) uint64 {
+	// find the lowest column number that we still required
+	var lowestRequiredColNumber uint64 = params.BeaconConfig().ColumnCount
+	for i := 0; i < int(req.Count); i++ {
+		slot := req.StartSlot + primitives.Slot(i)
+		bwc := bwm[slot]
+		colsReceived := bwc.Columns
+		requestedCols := req.SlotCols[i].Columns
+		newRequestedCols := &p2ppb.ColumnSidecarsByRangeRequest_SlotColumns{
+			Columns: make([]uint64, 0),
+		}
+		for j := range colsReceived {
+			if colsReceived[j].ColumnSidecar == nil {
+				newRequestedCols.Columns = append(newRequestedCols.Columns, requestedCols[j])
+			}
+		}
+		req.SlotCols[i] = newRequestedCols
+		if len(newRequestedCols.Columns) > 0 {
+			if lowestRequiredColNumber > newRequestedCols.Columns[0] {
+				lowestRequiredColNumber = newRequestedCols.Columns[0]
+			}
+		}
+	}
+	return colToSubnet(lowestRequiredColNumber)
 }

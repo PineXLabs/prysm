@@ -177,6 +177,30 @@ func (s *Service) filterPeerForColSubnet(index uint64) func(node *enode.Node) bo
 	}
 }
 
+// returns a method with filters peers specifically for a particular col subnet.
+func (s *Service) filterPeerForColSubnets(indices []uint64, idxMap map[uint64]int) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		if !s.filterPeer(node) {
+			return false
+		}
+		subnets, err := colSubnets(node.Record())
+		if err != nil {
+			return false
+		}
+		indExists := false
+		for _, comIdx := range subnets {
+			if _, ok := idxMap[comIdx]; ok {
+				indExists = true
+				idxMap[comIdx] -= 1
+				if idxMap[comIdx] == 0 {
+					delete(idxMap, comIdx)
+				}
+			}
+		}
+		return indExists
+	}
+}
+
 // lower threshold to broadcast object compared to searching
 // for a subnet. So that even in the event of poor peer
 // connectivity, we can still broadcast an attestation.
@@ -276,15 +300,21 @@ func computeSubscribedSubnets(nodeID enode.ID, epoch primitives.Epoch) ([]uint64
 
 func computeFixSubscribedColumnSubnets(nodeID enode.ID) []uint64 {
 	subs := []uint64{}
-	idUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
 	subnetCount := params.BeaconConfig().ColumnsidecarSubnetCount
-	offset := idUint256.Mod(idUint256, uint256.NewInt(subnetCount)).Uint64()
+	offset := computeNodeOffset(nodeID)
 	num := params.BeaconConfig().BeaconColumnSubnetCustodyRequired
 	for i := range num {
 		subnetIndex := (offset + i) % subnetCount
 		subs = append(subs, subnetIndex)
 	}
 	return subs
+}
+
+func computeNodeOffset(nodeID enode.ID) uint64 {
+	idUint256 := uint256.NewInt(0).SetBytes(nodeID.Bytes())
+	subnetCount := params.BeaconConfig().ColumnsidecarSubnetCount
+	offset := idUint256.Mod(idUint256, uint256.NewInt(subnetCount)).Uint64()
+	return offset
 }
 
 //	Spec pseudocode definition:
@@ -398,6 +428,10 @@ func syncSubnets(record *enr.Record) ([]uint64, error) {
 		}
 	}
 	return committeeIdxs, nil
+}
+
+func ColSubnets(record *enr.Record) ([]uint64, error) {
+	return colSubnets(record)
 }
 
 // Reads the col subnets entry from a node's ENR and determines

@@ -81,4 +81,8 @@ message BlobSidecarsByRangeRequest {
 message ColumnSidecarsByRangeRequest {
   uint64 start_slot = 1 [(ethereum.eth.ext.cast_type) = "github.com/prysmaticlabs/prysm/v5/consensus-types/primitives.Slot"];
   uint64 count = 2;
+  message SlotColumns{
+    repeated uint64 columns = 1 [(ethereum.eth.ext.ssz_max) = "32"];
+  };
+  repeated SlotColumns slot_cols =3 [(ethereum.eth.ext.ssz_max) = "1024"]; 
 }
