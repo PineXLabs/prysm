@@ -150,6 +150,7 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 		}
 		infos = append(infos, *bsNode)
 	}
+
 	dillDasOpts := []dill_das.Option{
 		dill_das.WithColumnProvider(p),
 		dill_das.WithCommitmentProvider(p),
@@ -178,7 +179,10 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 }
 
 func (s *Service) Start() {
-
+	err := s.dasServer.Start()
+	if err != nil {
+		log.WithError(err).Fatal("start das server failed")
+	}
 }
 func (s *Service) Stop() error {
 	return s.dasServer.Stop()
