@@ -72,9 +72,12 @@ type Flags struct {
 	PrepareAllPayloads bool // PrepareAllPayloads informs the engine to prepare a block on every slot.
 	// BlobSaveFsync requires blob saving to block on fsync to ensure blobs are durably persisted before passing DA.
 	BlobSaveFsync bool
+	// ColumnSaveFsync requires column saving to block on fsync to ensure columns are durably persisted before passing DA.
+	ColumnSaveFsync bool
 
-	SaveInvalidBlock bool // SaveInvalidBlock saves invalid block to temp.
-	SaveInvalidBlob  bool // SaveInvalidBlob saves invalid blob to temp.
+	SaveInvalidBlock  bool // SaveInvalidBlock saves invalid block to temp.
+	SaveInvalidBlob   bool // SaveInvalidBlob saves invalid blob to temp.
+	SaveInvalidColumn bool // SaveInvalidColumn saves invalid blob to temp.
 
 	// KeystoreImportDebounceInterval specifies the time duration the validator waits to reload new keys if they have
 	// changed on disk. This feature is for advanced use cases only.

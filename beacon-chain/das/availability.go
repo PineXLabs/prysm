@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	errMixedRoots = errors.New("BlobSidecars must all be for the same block")
+	errMixedRoots = errors.New("Sidecars must all be for the same block")
 )
 
 // LazilyPersistentStore is an implementation of AvailabilityStore to be used when batch syncing.

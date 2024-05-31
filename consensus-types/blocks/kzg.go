@@ -20,9 +20,10 @@ const (
 )
 
 var (
-	errInvalidIndex          = errors.New("index out of bounds")
-	errInvalidBodyRoot       = errors.New("invalid Beacon Block Body root")
-	errInvalidInclusionProof = errors.New("invalid KZG commitment inclusion proof")
+	errInvalidIndex                              = errors.New("index out of bounds")
+	errInvalidBodyRoot                           = errors.New("invalid Beacon Block Body root")
+	errInvalidInclusionProof                     = errors.New("invalid KZG commitment inclusion proof")
+	errMismatchBetweenCommitmenAndInclusionProof = errors.New("KZG commitment length not equal to inclusion proof")
 )
 
 // VerifyKZGInclusionProof verifies the Merkle proof in a Blob sidecar against
@@ -43,6 +44,33 @@ func VerifyKZGInclusionProof(blob ROBlob) error {
 	verified := trie.VerifyMerkleProof(root, chunks[0][:], blob.Index+KZGOffset, blob.CommitmentInclusionProof)
 	if !verified {
 		return errInvalidInclusionProof
+	}
+	return nil
+}
+
+// VerifyColumnKZGInclusionProof verifies the Merkle proof in a Column sidecar against
+// the beacon block body root.
+func VerifyColumnKZGInclusionProof(column ROColumn) error {
+	if column.SignedBlockHeader == nil {
+		return errNilBlockHeader
+	}
+	if column.SignedBlockHeader.Header == nil {
+		return errNilBlockHeader
+	}
+	root := column.SignedBlockHeader.Header.BodyRoot
+	if len(root) != field_params.RootLength {
+		return errInvalidBodyRoot
+	}
+	if len(column.BlobKzgCommitments) != len(column.CommitmentInclusionProofs) {
+		return errMismatchBetweenCommitmenAndInclusionProof
+	}
+	for i, kzgCommitment := range column.BlobKzgCommitments {
+		chunks := makeChunk(kzgCommitment)
+		gohashtree.HashChunks(chunks, chunks)
+		verified := trie.VerifyMerkleProof(root, chunks[0][:], uint64(i)+KZGOffset, column.CommitmentInclusionProofs[i].CommitmentInclusionProof)
+		if !verified {
+			return errInvalidInclusionProof
+		}
 	}
 	return nil
 }

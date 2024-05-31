@@ -136,13 +136,23 @@ func (s *Service) registerSubscribers(epoch primitives.Epoch, digest [4]byte) {
 	}
 
 	// New Gossip Topic in Deneb
+	//if epoch >= params.BeaconConfig().DenebForkEpoch {
+	//	s.subscribeStaticWithSubnets(
+	//		p2p.BlobSubnetTopicFormat,
+	//		s.validateBlob,   /* validator */
+	//		s.blobSubscriber, /* message handler */
+	//		digest,
+	//		params.BeaconConfig().BlobsidecarSubnetCount,
+	//	)
+	//}
+
 	if epoch >= params.BeaconConfig().DenebForkEpoch {
 		s.subscribeStaticWithSubnets(
-			p2p.BlobSubnetTopicFormat,
-			s.validateBlob,   /* validator */
-			s.blobSubscriber, /* message handler */
+			p2p.ColumnSubnetTopicFormat,
+			s.validateColumn,   /* validator */
+			s.columnSubscriber, /* message handler */
 			digest,
-			params.BeaconConfig().BlobsidecarSubnetCount,
+			params.BeaconConfig().ColumnsidecarSubnetCount,
 		)
 	}
 }

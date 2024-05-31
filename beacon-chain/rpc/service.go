@@ -109,6 +109,7 @@ type Config struct {
 	AttestationReceiver           blockchain.AttestationReceiver
 	BlockReceiver                 blockchain.BlockReceiver
 	BlobReceiver                  blockchain.BlobReceiver
+	ColumnReceiver                blockchain.ColumnReceiver
 	ExecutionChainService         execution.Chain
 	ChainStartFetcher             execution.ChainStartFetcher
 	ExecutionChainInfoFetcher     execution.ChainInfoFetcher
@@ -139,6 +140,7 @@ type Config struct {
 	Router                        *mux.Router
 	ClockWaiter                   startup.ClockWaiter
 	BlobStorage                   *filesystem.BlobStorage
+	ColumnStorage                 *filesystem.ColumnStorage
 	TrackedValidatorsCache        *cache.TrackedValidatorsCache
 	PayloadIDCache                *cache.PayloadIDCache
 }
@@ -213,7 +215,8 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		BeaconDB:           s.cfg.BeaconDB,
 		ChainInfoFetcher:   s.cfg.ChainInfoFetcher,
 		GenesisTimeFetcher: s.cfg.GenesisTimeFetcher,
-		BlobStorage:        s.cfg.BlobStorage,
+		//BlobStorage:        s.cfg.BlobStorage,
+		ColumnStorage: s.cfg.ColumnStorage,
 	}
 	rewardFetcher := &rewards.BlockRewardService{Replayer: ch, DB: s.cfg.BeaconDB}
 	coreService := &core.Service{
@@ -251,6 +254,7 @@ func NewService(ctx context.Context, cfg *Config) *Service {
 		P2P:                    s.cfg.Broadcaster,
 		BlockReceiver:          s.cfg.BlockReceiver,
 		BlobReceiver:           s.cfg.BlobReceiver,
+		ColumnReceiver:         s.cfg.ColumnReceiver,
 		MockEth1Votes:          s.cfg.MockEth1Votes,
 		Eth1BlockFetcher:       s.cfg.ExecutionChainService,
 		PendingDepositsFetcher: s.cfg.PendingDepositFetcher,

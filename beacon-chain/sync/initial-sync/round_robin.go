@@ -28,8 +28,14 @@ const (
 // blockReceiverFn defines block receiving function.
 type blockReceiverFn func(ctx context.Context, block interfaces.ReadOnlySignedBeaconBlock, blockRoot [32]byte, avs das.AvailabilityStore) error
 
+// blockReceiverFn2 defines block receiving function.
+type blockReceiverFn2 func(ctx context.Context, block interfaces.ReadOnlySignedBeaconBlock, blockRoot [32]byte, avs das.ColumnAvailabilityStore) error
+
 // batchBlockReceiverFn defines batch receiving function.
 type batchBlockReceiverFn func(ctx context.Context, blks []blocks.ROBlock, avs das.AvailabilityStore) error
+
+// batchBlockReceiverFn2 defines batch receiving function.
+type batchBlockReceiverFn2 func(ctx context.Context, blks []blocks.ROBlock, avs das.ColumnAvailabilityStore) error
 
 // Round Robin sync looks at the latest peer statuses and syncs up to the highest known epoch.
 //
@@ -48,9 +54,11 @@ func (s *Service) roundRobinSync(genesis time.Time) error {
 	s.counter = ratecounter.NewRateCounter(counterSeconds * time.Second)
 
 	// Step 1 - Sync to end of finalized epoch.
+	log.Debug("Sync to end of finalized epoch begins")
 	if err := s.syncToFinalizedEpoch(ctx, genesis); err != nil {
 		return err
 	}
+	log.Debug("Sync to end of finalized epoch ends")
 
 	// Already at head, no need for 2nd phase.
 	if s.cfg.Chain.HeadSlot() == slots.Since(genesis) {
@@ -59,6 +67,7 @@ func (s *Service) roundRobinSync(genesis time.Time) error {
 
 	// Step 2 - sync to head from majority of peers (from no less than MinimumSyncPeers*2 peers)
 	// having the same world view on non-finalized epoch.
+	log.Debug("Sync to non finalized epoch")
 	return s.syncToNonFinalizedEpoch(ctx, genesis)
 }
 
@@ -70,6 +79,7 @@ func (s *Service) syncToFinalizedEpoch(ctx context.Context, genesis time.Time) e
 	}
 	if s.cfg.Chain.HeadSlot() >= highestFinalizedSlot {
 		// No need to sync, already synced to the finalized slot.
+		log.Debugf("s.cfg.Chain.HeadSlot() [%d] >= highestFinalizedSlot [%d]", s.cfg.Chain.HeadSlot(), highestFinalizedSlot)
 		log.Debug("Already synced to finalized epoch")
 		return nil
 	}
@@ -92,11 +102,11 @@ func (s *Service) syncToFinalizedEpoch(ctx context.Context, genesis time.Time) e
 		return err
 	}
 
-	for data := range queue.fetchedData {
-		// If blobs are available. Verify blobs and blocks are consistence.
-		// We can't import a block if there's no associated blob within DA bound.
-		// The blob has to pass aggregated proof check.
-		s.processFetchedData(ctx, genesis, s.cfg.Chain.HeadSlot(), data)
+	for data := range queue.fetchedColumnData {
+		// If columns are available. Verify columns and blocks are consistence.
+		// We can't import a block if there's no associated column within DA bound.
+		// The column has to pass aggregated proof check.
+		s.processFetchedColumnData(ctx, genesis, s.cfg.Chain.HeadSlot(), data)
 	}
 
 	log.WithFields(logrus.Fields{
@@ -130,8 +140,8 @@ func (s *Service) syncToNonFinalizedEpoch(ctx context.Context, genesis time.Time
 	if err := queue.start(); err != nil {
 		return err
 	}
-	for data := range queue.fetchedData {
-		s.processFetchedDataRegSync(ctx, genesis, s.cfg.Chain.HeadSlot(), data)
+	for data := range queue.fetchedColumnData {
+		s.processFetchedColumnDataRegSync(ctx, genesis, s.cfg.Chain.HeadSlot(), data)
 	}
 	log.WithFields(logrus.Fields{
 		"syncedSlot":  s.cfg.Chain.HeadSlot(),
@@ -145,6 +155,7 @@ func (s *Service) syncToNonFinalizedEpoch(ctx context.Context, genesis time.Time
 }
 
 // processFetchedData processes data received from queue.
+/*
 func (s *Service) processFetchedData(
 	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedData) {
 	defer s.updatePeerScorerStats(data.pid, startSlot)
@@ -154,8 +165,21 @@ func (s *Service) processFetchedData(
 		log.WithError(err).Warn("Skip processing batched blocks")
 	}
 }
+*/
+
+// processFetchedColumnData processes data received from queue.
+func (s *Service) processFetchedColumnData(
+	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedColumnData) {
+	defer s.updatePeerScorerStats(data.pid, startSlot)
+
+	// Use Batch Block Verify to process and verify batches directly.
+	if err := s.processBatchedBlocksWithColumns(ctx, genesis, data.bwc, s.cfg.Chain.ReceiveBlockBatch2); err != nil {
+		log.WithError(err).Warn("Skip processing batched blocks")
+	}
+}
 
 // processFetchedDataRegSync processes data received from queue.
+/*
 func (s *Service) processFetchedDataRegSync(
 	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedData) {
 	defer s.updatePeerScorerStats(data.pid, startSlot)
@@ -180,6 +204,45 @@ func (s *Service) processFetchedDataRegSync(
 			return
 		}
 		if err := s.processBlock(ctx, genesis, b, s.cfg.Chain.ReceiveBlock, avs); err != nil {
+			switch {
+			case errors.Is(err, errParentDoesNotExist):
+				log.WithFields(batchFields).WithField("missingParent", fmt.Sprintf("%#x", b.Block.Block().ParentRoot())).
+					WithFields(syncFields(b.Block)).Debug("Could not process batch blocks due to missing parent")
+				return
+			default:
+				log.WithError(err).WithFields(batchFields).WithFields(syncFields(b.Block)).Warn("Block processing failure")
+				return
+			}
+		}
+	}
+}
+*/
+
+// processFetchedColumnDataRegSync processes data received from queue.
+func (s *Service) processFetchedColumnDataRegSync(
+	ctx context.Context, genesis time.Time, startSlot primitives.Slot, data *blocksQueueFetchedColumnData) {
+	defer s.updatePeerScorerStats(data.pid, startSlot)
+
+	bwc, err := validUnprocessed2(ctx, data.bwc, s.cfg.Chain.HeadSlot(), s.isProcessedBlock)
+	if err != nil {
+		log.WithError(err).Debug("batch did not contain a valid sequence of unprocessed blocks")
+		return
+	}
+	if len(bwc) == 0 {
+		return
+	}
+	bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
+	batchFields := logrus.Fields{
+		"firstSlot":        data.bwc[0].Block.Block().Slot(),
+		"firstUnprocessed": bwc[0].Block.Block().Slot(),
+	}
+	for _, b := range bwc {
+		if err := avs.Persist(s.clock.CurrentSlot(), b.Columns...); err != nil {
+			log.WithError(err).WithFields(batchFields).WithFields(syncFields(b.Block)).Warn("Batch failure due to ColumnSidecar issues")
+			return
+		}
+		if err := s.processBlock2(ctx, genesis, b, s.cfg.Chain.ReceiveBlock2, avs); err != nil {
 			switch {
 			case errors.Is(err, errParentDoesNotExist):
 				log.WithFields(batchFields).WithField("missingParent", fmt.Sprintf("%#x", b.Block.Block().ParentRoot())).
@@ -274,6 +337,27 @@ func (s *Service) processBlock(
 	return blockReceiver(ctx, blk, blkRoot, avs)
 }
 
+// processBlock2 performs basic checks on incoming block, and triggers receiver function.
+func (s *Service) processBlock2(
+	ctx context.Context,
+	genesis time.Time,
+	bwc blocks.BlockWithROColumns,
+	blockReceiver blockReceiverFn2,
+	avs das.ColumnAvailabilityStore,
+) error {
+	blk := bwc.Block
+	blkRoot := blk.Root()
+	if s.isProcessedBlock(ctx, blk) {
+		return fmt.Errorf("slot: %d , root %#x: %w", blk.Block().Slot(), blkRoot, errBlockAlreadyProcessed)
+	}
+
+	s.logSyncStatus(genesis, blk.Block(), blkRoot)
+	if !s.cfg.Chain.HasBlock(ctx, blk.Block().ParentRoot()) {
+		return fmt.Errorf("%w: (in processBlock, slot=%d) %#x", errParentDoesNotExist, blk.Block().Slot(), blk.Block().ParentRoot())
+	}
+	return blockReceiver(ctx, blk, blkRoot, avs)
+}
+
 type processedChecker func(context.Context, blocks.ROBlock) bool
 
 func validUnprocessed(ctx context.Context, bwb []blocks.BlockWithROBlobs, headSlot primitives.Slot, isProc processedChecker) ([]blocks.BlockWithROBlobs, error) {
@@ -306,6 +390,37 @@ func validUnprocessed(ctx context.Context, bwb []blocks.BlockWithROBlobs, headSl
 	return bwb[nonProcessedIdx:], nil
 }
 
+func validUnprocessed2(ctx context.Context, bwc []blocks.BlockWithROColumns, headSlot primitives.Slot, isProc processedChecker) ([]blocks.BlockWithROColumns, error) {
+	// use a pointer to avoid confusing the zero-value with the case where the first element is processed.
+	var processed *int
+	for i := range bwc {
+		b := bwc[i].Block
+		if headSlot >= b.Block().Slot() && isProc(ctx, b) {
+			val := i
+			processed = &val
+			continue
+		}
+		if i > 0 {
+			parent := bwc[i-1].Block
+			if parent.Root() != b.Block().ParentRoot() {
+				return nil, fmt.Errorf("expected linear block list with parent root of %#x (slot %d) but received %#x (slot %d)",
+					parent.Root(), parent.Block().Slot(), b.Block().ParentRoot(), b.Block().Slot())
+			}
+		}
+	}
+	if processed == nil {
+		return bwc, nil
+	}
+	if *processed+1 == len(bwc) {
+		maxIncoming := bwc[len(bwc)-1].Block
+		maxRoot := maxIncoming.Root()
+		return nil, fmt.Errorf("%w: headSlot=%d, blockSlot=%d, root=%#x", errBlockAlreadyProcessed, headSlot, maxIncoming.Block().Slot(), maxRoot)
+	}
+	nonProcessedIdx := *processed + 1
+	return bwc[nonProcessedIdx:], nil
+}
+
+/*
 func (s *Service) processBatchedBlocks(ctx context.Context, genesis time.Time,
 	bwb []blocks.BlockWithROBlobs, bFunc batchBlockReceiverFn) error {
 	if len(bwb) == 0 {
@@ -340,6 +455,43 @@ func (s *Service) processBatchedBlocks(ctx context.Context, genesis time.Time,
 	}
 
 	return bFunc(ctx, blocks.BlockWithROBlobsSlice(bwb).ROBlocks(), avs)
+}
+*/
+
+func (s *Service) processBatchedBlocksWithColumns(ctx context.Context, genesis time.Time,
+	bwc []blocks.BlockWithROColumns, bFunc batchBlockReceiverFn2) error {
+	if len(bwc) == 0 {
+		return errors.New("0 blocks provided into method")
+	}
+	headSlot := s.cfg.Chain.HeadSlot()
+	var err error
+	bwc, err = validUnprocessed2(ctx, bwc, headSlot, s.isProcessedBlock)
+	if err != nil {
+		return err
+	}
+	if len(bwc) == 0 {
+		return nil
+	}
+
+	first := bwc[0].Block
+	if !s.cfg.Chain.HasBlock(ctx, first.Block().ParentRoot()) {
+		return fmt.Errorf("%w: %#x (in processBatchedBlocks, slot=%d)",
+			errParentDoesNotExist, first.Block().ParentRoot(), first.Block().Slot())
+	}
+
+	bc := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
+	avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bc)
+	s.logBatchSyncStatus(genesis, first, len(bwc))
+	for _, bb := range bwc {
+		if len(bb.Columns) == 0 {
+			continue
+		}
+		if err := avs.Persist(s.clock.CurrentSlot(), bb.Columns...); err != nil {
+			return err
+		}
+	}
+
+	return bFunc(ctx, blocks.BlockWithROColumnsSlice(bwc).ROBlocks(), avs)
 }
 
 // updatePeerScorerStats adjusts monitored metrics for a peer.

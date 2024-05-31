@@ -195,7 +195,7 @@ func (s *Service) hasPeer() bool {
 var errNoPeersForPending = errors.New("no suitable peers to process pending block queue, delaying")
 
 // processAndBroadcastBlock validates, processes, and broadcasts a block.
-// part of the function is to request missing blobs from peers if the block contains kzg commitments.
+// part of the function is to request missing columns from peers if the block contains kzg commitments.
 func (s *Service) processAndBroadcastBlock(ctx context.Context, b interfaces.ReadOnlySignedBeaconBlock, blkRoot [32]byte) error {
 	if err := s.validateBeaconBlock(ctx, b, blkRoot); err != nil {
 		if !errors.Is(ErrOptimisticParent, err) {
@@ -204,7 +204,7 @@ func (s *Service) processAndBroadcastBlock(ctx context.Context, b interfaces.Rea
 		}
 	}
 
-	request, err := s.pendingBlobsRequestForBlock(blkRoot, b)
+	request, err := s.pendingColumnsRequestForBlock(blkRoot, b)
 	if err != nil {
 		return err
 	}
@@ -214,12 +214,12 @@ func (s *Service) processAndBroadcastBlock(ctx context.Context, b interfaces.Rea
 		if peerCount == 0 {
 			return errors.Wrapf(errNoPeersForPending, "block root=%#x", blkRoot)
 		}
-		if err := s.sendAndSaveBlobSidecars(ctx, request, peers[rand.NewGenerator().Int()%peerCount], b); err != nil {
+		if err := s.sendAndSaveColumnSidecars(ctx, request, peers[rand.NewGenerator().Int()%peerCount], b); err != nil {
 			return err
 		}
 	}
 
-	if err := s.cfg.chain.ReceiveBlock(ctx, b, blkRoot, nil); err != nil {
+	if err := s.cfg.chain.ReceiveBlock2(ctx, b, blkRoot, nil); err != nil {
 		return err
 	}
 

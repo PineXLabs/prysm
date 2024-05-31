@@ -51,7 +51,8 @@ var _ runtime.Service = (*Service)(nil)
 
 const rangeLimit uint64 = 1024
 const seenBlockSize = 1000
-const seenBlobSize = seenBlockSize * 4 // Each block can have max 4 blobs. Worst case 164kB for cache.
+const seenBlobSize = seenBlockSize * 4     // Each block can have max 4 blobs. Worst case 164kB for cache.
+const seenColumnSize = seenBlockSize * 128 // Each block can have max 128 blobs. Worst case 5MB for cache.
 const seenUnaggregatedAttSize = 20000
 const seenAggregatedAttSize = 16384
 const seenSyncMsgSize = 1000         // Maximum of 512 sync committee members, 1000 is a safe amount.
@@ -96,12 +97,14 @@ type config struct {
 	clock                         *startup.Clock
 	stateNotifier                 statefeed.Notifier
 	blobStorage                   *filesystem.BlobStorage
+	columnStorage                 *filesystem.ColumnStorage
 }
 
 // This defines the interface for interacting with block chain service
 type blockchainService interface {
 	blockchain.BlockReceiver
 	blockchain.BlobReceiver
+	blockchain.ColumnReceiver
 	blockchain.HeadFetcher
 	blockchain.FinalizationFetcher
 	blockchain.ForkFetcher
@@ -133,6 +136,8 @@ type Service struct {
 	seenBlockCache                   *lru.Cache
 	seenBlobLock                     sync.RWMutex
 	seenBlobCache                    *lru.Cache
+	seenColumnLock                   sync.RWMutex
+	seenColumnCache                  *lru.Cache
 	seenAggregatedAttestationLock    sync.RWMutex
 	seenAggregatedAttestationCache   *lru.Cache
 	seenUnAggregatedAttestationLock  sync.RWMutex
@@ -156,6 +161,7 @@ type Service struct {
 	initialSyncComplete              chan struct{}
 	verifierWaiter                   *verification.InitializerWaiter
 	newBlobVerifier                  verification.NewBlobVerifier
+	newColumnVerifier                verification.NewColumnVerifier
 	availableBlocker                 coverage.AvailableBlocker
 	ctxMap                           ContextByteVersions
 }
@@ -214,6 +220,12 @@ func newBlobVerifierFromInitializer(ini *verification.Initializer) verification.
 	}
 }
 
+func newColumnVerifierFromInitializer(ini *verification.Initializer) verification.NewColumnVerifier {
+	return func(b blocks.ROColumn, reqs []verification.Requirement) verification.ColumnVerifier {
+		return ini.NewColumnVerifier(b, reqs)
+	}
+}
+
 // Start the regular sync service.
 func (s *Service) Start() {
 	v, err := s.verifierWaiter.WaitForInitializer(s.ctx)
@@ -221,7 +233,8 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Could not get verification initializer")
 		return
 	}
-	s.newBlobVerifier = newBlobVerifierFromInitializer(v)
+	//s.newBlobVerifier = newBlobVerifierFromInitializer(v)
+	s.newColumnVerifier = newColumnVerifierFromInitializer(v)
 
 	go s.verifierRoutine()
 	go s.registerHandlers()
@@ -276,6 +289,7 @@ func (s *Service) Status() error {
 func (s *Service) initCaches() {
 	s.seenBlockCache = lruwrpr.New(seenBlockSize)
 	s.seenBlobCache = lruwrpr.New(seenBlobSize)
+	s.seenColumnCache = lruwrpr.New(seenColumnSize)
 	s.seenAggregatedAttestationCache = lruwrpr.New(seenAggregatedAttSize)
 	s.seenUnAggregatedAttestationCache = lruwrpr.New(seenUnaggregatedAttSize)
 	s.seenSyncMessageCache = lruwrpr.New(seenSyncMsgSize)

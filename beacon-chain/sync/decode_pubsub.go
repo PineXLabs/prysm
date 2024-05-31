@@ -39,6 +39,8 @@ func (s *Service) decodePubsubMessage(msg *pubsub.Message) (ssz.Unmarshaler, err
 		topic = p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.SyncCommitteeMessage{})]
 	case strings.Contains(topic, p2p.GossipBlobSidecarMessage):
 		topic = p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.BlobSidecar{})]
+	case strings.Contains(topic, p2p.GossipColumnSidecarMessage):
+		topic = p2p.GossipTypeMapping[reflect.TypeOf(&ethpb.ColumnSidecar{})]
 	}
 
 	base := p2p.GossipTopicMappings(topic, 0)

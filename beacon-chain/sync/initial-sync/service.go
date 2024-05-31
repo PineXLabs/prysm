@@ -24,6 +24,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/sync"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/verification"
 	"github.com/prysmaticlabs/prysm/v5/cmd/beacon-chain/flags"
+	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/crypto/rand"
@@ -52,22 +53,22 @@ type Config struct {
 	BlockNotifier       blockfeed.Notifier
 	ClockWaiter         startup.ClockWaiter
 	InitialSyncComplete chan struct{}
-	BlobStorage         *filesystem.BlobStorage
+	ColumnStorage       *filesystem.ColumnStorage
 }
 
 // Service service.
 type Service struct {
-	cfg             *Config
-	ctx             context.Context
-	cancel          context.CancelFunc
-	synced          *abool.AtomicBool
-	chainStarted    *abool.AtomicBool
-	counter         *ratecounter.RateCounter
-	genesisChan     chan time.Time
-	clock           *startup.Clock
-	verifierWaiter  *verification.InitializerWaiter
-	newBlobVerifier verification.NewBlobVerifier
-	ctxMap          sync.ContextByteVersions
+	cfg               *Config
+	ctx               context.Context
+	cancel            context.CancelFunc
+	synced            *abool.AtomicBool
+	chainStarted      *abool.AtomicBool
+	counter           *ratecounter.RateCounter
+	genesisChan       chan time.Time
+	clock             *startup.Clock
+	verifierWaiter    *verification.InitializerWaiter
+	newColumnVerifier verification.NewColumnVerifier
+	ctxMap            sync.ContextByteVersions
 }
 
 // Option is a functional option for the initial-sync Service.
@@ -147,7 +148,8 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Could not get verification initializer")
 		return
 	}
-	s.newBlobVerifier = newBlobVerifierFromInitializer(v)
+	//s.newBlobVerifier = newBlobVerifierFromInitializer(v)
+	s.newColumnVerifier = newColumnVerifierFromInitializer(v)
 
 	gt := clock.GenesisTime()
 	if gt.IsZero() {
@@ -184,8 +186,8 @@ func (s *Service) Start() {
 		log.WithError(err).Error("Error waiting for minimum number of peers")
 		return
 	}
-	if err := s.fetchOriginBlobs(peers); err != nil {
-		log.WithError(err).Error("Failed to fetch missing blobs for checkpoint origin")
+	if err := s.fetchOriginColumns(peers); err != nil {
+		log.WithError(err).Error("Failed to fetch missing columns for checkpoint origin")
 		return
 	}
 	if err := s.roundRobinSync(gt); err != nil {
@@ -306,6 +308,34 @@ func missingBlobRequest(blk blocks.ROBlock, store *filesystem.BlobStorage) (p2pt
 	return req, nil
 }
 
+func missingColumnRequest(blk blocks.ROBlock, store *filesystem.ColumnStorage) (p2ptypes.ColumnSidecarsByRootReq, error) {
+	r := blk.Root()
+	if blk.Version() < version.Deneb {
+		return nil, nil
+	}
+	cmts, err := blk.Block().Body().BlobKzgCommitments()
+	if err != nil {
+		log.WithField("root", r).Error("Error reading commitments from checkpoint sync origin block")
+		return nil, err
+	}
+	if len(cmts) == 0 {
+		return nil, nil
+	}
+	onDisk, err := store.Indices(r)
+	if err != nil {
+		return nil, errors.Wrapf(err, "error checking existing blobs for checkpoint sync block root %#x", r)
+	}
+	req := make(p2ptypes.ColumnSidecarsByRootReq, 0, fieldparams.MaxColumnsPerBlock)
+	for i := range cmts {
+		if onDisk[i] {
+			continue
+		}
+		req = append(req, &eth.ColumnIdentifier{BlockRoot: r[:], Index: uint64(i)})
+	}
+	return req, nil
+}
+
+/*
 func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
 	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
@@ -355,6 +385,57 @@ func (s *Service) fetchOriginBlobs(pids []peer.ID) error {
 	}
 	return fmt.Errorf("no connected peer able to provide blobs for checkpoint sync block %#x", r)
 }
+*/
+
+func (s *Service) fetchOriginColumns(pids []peer.ID) error {
+	r, err := s.cfg.DB.OriginCheckpointBlockRoot(s.ctx)
+	if errors.Is(err, db.ErrNotFoundOriginBlockRoot) {
+		return nil
+	}
+	blk, err := s.cfg.DB.Block(s.ctx, r)
+	if err != nil {
+		log.WithField("root", fmt.Sprintf("%#x", r)).Error("Block for checkpoint sync origin root not found in db")
+		return err
+	}
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(blk.Block().Slot()), slots.ToEpoch(s.clock.CurrentSlot())) {
+		return nil
+	}
+	rob, err := blocks.NewROBlockWithRoot(blk, r)
+	if err != nil {
+		return err
+	}
+	req, err := missingColumnRequest(rob, s.cfg.ColumnStorage)
+	if err != nil {
+		return err
+	}
+	if len(req) == 0 {
+		log.WithField("root", fmt.Sprintf("%#x", r)).Debug("All columns for checkpoint block are present")
+		return nil
+	}
+	shufflePeers(pids)
+	for i := range pids {
+		sidecars, err := sync.SendColumnSidecarByRoot(s.ctx, s.clock, s.cfg.P2P, pids[i], s.ctxMap, &req)
+		if err != nil {
+			continue
+		}
+		if len(sidecars) != len(req) {
+			continue
+		}
+		bv := verification.NewColumnBatchVerifier(s.newColumnVerifier, verification.InitsyncColumnSidecarRequirements)
+		avs := das.NewColumnLazilyPersistentStore(s.cfg.ColumnStorage, bv)
+		current := s.clock.CurrentSlot()
+		if err := avs.Persist(current, sidecars...); err != nil {
+			return err
+		}
+		if err := avs.IsDataAvailable(s.ctx, current, rob); err != nil {
+			log.WithField("root", fmt.Sprintf("%#x", r)).WithField("peerID", pids[i]).Warn("Columns from peer for origin block were unusable")
+			continue
+		}
+		log.WithField("nColumns", len(sidecars)).WithField("root", fmt.Sprintf("%#x", r)).Info("Successfully downloaded blobs for checkpoint sync block")
+		return nil
+	}
+	return fmt.Errorf("no connected peer able to provide columns for checkpoint sync block %#x", r)
+}
 
 func shufflePeers(pids []peer.ID) {
 	rg := rand.NewGenerator()
@@ -366,5 +447,11 @@ func shufflePeers(pids []peer.ID) {
 func newBlobVerifierFromInitializer(ini *verification.Initializer) verification.NewBlobVerifier {
 	return func(b blocks.ROBlob, reqs []verification.Requirement) verification.BlobVerifier {
 		return ini.NewBlobVerifier(b, reqs)
+	}
+}
+
+func newColumnVerifierFromInitializer(ini *verification.Initializer) verification.NewColumnVerifier {
+	return func(b blocks.ROColumn, reqs []verification.Requirement) verification.ColumnVerifier {
+		return ini.NewColumnVerifier(b, reqs)
 	}
 }

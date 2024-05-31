@@ -22,8 +22,8 @@ type p2pWorker struct {
 	v    *verifier
 	c    *startup.Clock
 	cm   sync.ContextByteVersions
-	nbv  verification.NewBlobVerifier
-	bfs  *filesystem.BlobStorage
+	ncv  verification.NewColumnVerifier
+	cfs  *filesystem.ColumnStorage
 }
 
 func (w *p2pWorker) run(ctx context.Context) {
@@ -31,8 +31,8 @@ func (w *p2pWorker) run(ctx context.Context) {
 		select {
 		case b := <-w.todo:
 			log.WithFields(b.logFields()).WithField("backfillWorker", w.id).Debug("Backfill worker received batch")
-			if b.state == batchBlobSync {
-				w.done <- w.handleBlobs(ctx, b)
+			if b.state == batchColumnSync {
+				w.done <- w.handleColumns(ctx, b)
 			} else {
 				w.done <- w.handleBlocks(ctx, b)
 			}
@@ -73,35 +73,56 @@ func (w *p2pWorker) handleBlocks(ctx context.Context, b batch) batch {
 	}
 	backfillBlocksApproximateBytes.Add(float64(bdl))
 	log.WithFields(b.logFields()).WithField("dlbytes", bdl).Debug("Backfill batch block bytes downloaded")
-	bs, err := newBlobSync(cs, vb, &blobSyncConfig{retentionStart: blobRetentionStart, nbv: w.nbv, store: w.bfs})
+	bs, err := newColumnSync(cs, vb, &columnSyncConfig{retentionStart: blobRetentionStart, ncv: w.ncv, store: w.cfs})
 	if err != nil {
 		return b.withRetryableError(err)
 	}
 	return b.withResults(vb, bs)
 }
 
-func (w *p2pWorker) handleBlobs(ctx context.Context, b batch) batch {
-	b.blobPid = b.busy
+//func (w *p2pWorker) handleBlobs(ctx context.Context, b batch) batch {
+//	b.columnPid = b.busy
+//	start := time.Now()
+//	// we don't need to use the response for anything other than metrics, because blobResponseValidation
+//	// adds each of them to a batch AvailabilityStore once it is checked.
+//	blobs, err := sync.SendBlobsByRangeRequest(ctx, w.c, w.p2p, b.columnPid, w.cm, b.blobRequest(), b.blobResponseValidator(), blobValidationMetrics)
+//	if err != nil {
+//		b.bs = nil
+//		return b.withRetryableError(err)
+//	}
+//	dlt := time.Now()
+//	backfillBatchTimeDownloadingBlobs.Observe(float64(dlt.Sub(start).Milliseconds()))
+//	if len(blobs) > 0 {
+//		// All blobs are the same size, so we can compute 1 and use it for all in the batch.
+//		sz := blobs[0].SizeSSZ() * len(blobs)
+//		backfillBlobsApproximateBytes.Add(float64(sz))
+//		log.WithFields(b.logFields()).WithField("dlbytes", sz).Debug("Backfill batch blob bytes downloaded")
+//	}
+//	return b.postBlobSync()
+//}
+
+func (w *p2pWorker) handleColumns(ctx context.Context, b batch) batch {
+	b.columnPid = b.busy
 	start := time.Now()
-	// we don't need to use the response for anything other than metrics, because blobResponseValidation
+	// we don't need to use the response for anything other than metrics, because columnResponseValidation
 	// adds each of them to a batch AvailabilityStore once it is checked.
-	blobs, err := sync.SendBlobsByRangeRequest(ctx, w.c, w.p2p, b.blobPid, w.cm, b.blobRequest(), b.blobResponseValidator(), blobValidationMetrics)
+	columns, err := sync.SendColumnsByRangeRequest(ctx, w.c, w.p2p, b.columnPid, w.cm, b.columnRequest(), b.columnResponseValidator(), columnValidationMetrics)
 	if err != nil {
-		b.bs = nil
+		b.cs = nil
 		return b.withRetryableError(err)
 	}
 	dlt := time.Now()
-	backfillBatchTimeDownloadingBlobs.Observe(float64(dlt.Sub(start).Milliseconds()))
-	if len(blobs) > 0 {
-		// All blobs are the same size, so we can compute 1 and use it for all in the batch.
-		sz := blobs[0].SizeSSZ() * len(blobs)
+	backfillBatchTimeDownloadingColumns.Observe(float64(dlt.Sub(start).Milliseconds()))
+	if len(columns) > 0 {
+		// All columns are the same size, so we can compute 1 and use it for all in the batch.
+		sz := columns[0].SizeSSZ() * len(columns)
 		backfillBlobsApproximateBytes.Add(float64(sz))
 		log.WithFields(b.logFields()).WithField("dlbytes", sz).Debug("Backfill batch blob bytes downloaded")
 	}
-	return b.postBlobSync()
+	return b.postColumnSync()
 }
 
-func newP2pWorker(id workerId, p p2p.P2P, todo, done chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, nbv verification.NewBlobVerifier, bfs *filesystem.BlobStorage) *p2pWorker {
+func newP2pWorker(id workerId, p p2p.P2P, todo, done chan batch, c *startup.Clock, v *verifier, cm sync.ContextByteVersions, ncv verification.NewColumnVerifier, cfs *filesystem.ColumnStorage) *p2pWorker {
 	return &p2pWorker{
 		id:   id,
 		todo: todo,
@@ -110,7 +131,7 @@ func newP2pWorker(id workerId, p p2p.P2P, todo, done chan batch, c *startup.Cloc
 		v:    v,
 		c:    c,
 		cm:   cm,
-		nbv:  nbv,
-		bfs:  bfs,
+		ncv:  ncv,
+		cfs:  cfs,
 	}
 }

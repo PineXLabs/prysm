@@ -7,13 +7,17 @@ import (
 	fieldparams "github.com/prysmaticlabs/prysm/v5/config/fieldparams"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
+	"github.com/prysmaticlabs/prysm/v5/crypto/hash"
 )
 
 var (
-	ErrDuplicateSidecar   = errors.New("duplicate sidecar stashed in AvailabilityStore")
-	errIndexOutOfBounds   = errors.New("sidecar.index > MAX_BLOBS_PER_BLOCK")
-	errCommitmentMismatch = errors.New("KzgCommitment of sidecar in cache did not match block commitment")
-	errMissingSidecar     = errors.New("no sidecar in cache for block commitment")
+	ErrDuplicateSidecar        = errors.New("duplicate sidecar stashed in AvailabilityStore")
+	errIndexOutOfBounds        = errors.New("sidecar.index > MAX_BLOBS_PER_BLOCK")
+	errColumnIndexOutOfBounds  = errors.New("ColumnSidecar.index > MAX_COLUMNS_PER_BLOCK")
+	errCommitmentMismatch      = errors.New("KzgCommitment of sidecar in cache did not match block commitment")
+	errCommitmentsHashMismatch = errors.New("The CommitmentsHash of sidecar in cache did not match the hash of block commitments")
+	errMissingSidecar          = errors.New("no sidecar in cache for block commitment")
+	errMissingColumnSidecar    = errors.New("no column sidecar in cache for block commitment")
 )
 
 // cacheKey includes the slot so that we can easily iterate through the cache and compare
@@ -28,12 +32,25 @@ type cache struct {
 	entries map[cacheKey]*cacheEntry
 }
 
+type columnCache struct {
+	entries map[cacheKey]*columnCacheEntry
+}
+
 func newCache() *cache {
 	return &cache{entries: make(map[cacheKey]*cacheEntry)}
 }
 
+func newColumnCache() *columnCache {
+	return &columnCache{entries: make(map[cacheKey]*columnCacheEntry)}
+}
+
 // keyFromSidecar is a convenience method for constructing a cacheKey from a BlobSidecar value.
 func keyFromSidecar(sc blocks.ROBlob) cacheKey {
+	return cacheKey{slot: sc.Slot(), root: sc.BlockRoot()}
+}
+
+// keyFromColumnSidecar is a convenience method for constructing a cacheKey from a ColumnSidecar value.
+func keyFromColumnSidecar(sc blocks.ROColumn) cacheKey {
 	return cacheKey{slot: sc.Slot(), root: sc.BlockRoot()}
 }
 
@@ -57,9 +74,29 @@ func (c *cache) delete(key cacheKey) {
 	delete(c.entries, key)
 }
 
+// ensure returns the entry for the given key, creating it if it isn't already present.
+func (c *columnCache) ensure(key cacheKey) *columnCacheEntry {
+	e, ok := c.entries[key]
+	if !ok {
+		e = &columnCacheEntry{}
+		c.entries[key] = e
+	}
+	return e
+}
+
+// delete removes the cache entry from the column cache.
+func (c *columnCache) delete(key cacheKey) {
+	delete(c.entries, key)
+}
+
 // cacheEntry holds a fixed-length cache of BlobSidecars.
 type cacheEntry struct {
 	scs [fieldparams.MaxBlobsPerBlock]*blocks.ROBlob
+}
+
+// columnCacheEntry holds a fixed-length cache of ColumnSidecars.
+type columnCacheEntry struct {
+	scs [fieldparams.MaxColumnsPerBlock]*blocks.ROColumn
 }
 
 // stash adds an item to the in-memory cache of BlobSidecars.
@@ -71,6 +108,20 @@ func (e *cacheEntry) stash(sc *blocks.ROBlob) error {
 	}
 	if e.scs[sc.Index] != nil {
 		return errors.Wrapf(ErrDuplicateSidecar, "root=%#x, index=%d, commitment=%#x", sc.BlockRoot(), sc.Index, sc.KzgCommitment)
+	}
+	e.scs[sc.Index] = sc
+	return nil
+}
+
+// stash adds an item to the in-memory cache of ColumnSidecars.
+// Only the first ColumnSidecar of a given Index will be kept in the cache.
+// stash will return an error if the given column is already in the cache, or if the Index is out of bounds.
+func (e *columnCacheEntry) stash(sc *blocks.ROColumn) error {
+	if sc.Index >= fieldparams.MaxColumnsPerBlock {
+		return errors.Wrapf(errColumnIndexOutOfBounds, "index=%d", sc.Index)
+	}
+	if e.scs[sc.Index] != nil {
+		return errors.Wrapf(ErrDuplicateSidecar, "root=%#x, index=%d, commitmentsHash=%#x", sc.BlockRoot(), sc.Index, sc.CommitmentsHash)
 	}
 	e.scs[sc.Index] = sc
 	return nil
@@ -103,6 +154,33 @@ func (e *cacheEntry) filter(root [32]byte, kc safeCommitmentArray) ([]blocks.ROB
 	return scs, nil
 }
 
+// filter evicts sidecars that are not committed to by the block and returns custom
+// errors if the cache is missing any of the commitments, or if the commitments in
+// the cache do not match those found in the block. If err is nil, then all expected
+// commitments were found in the cache and the sidecar slice return value can be used
+// to perform a DA check against the cached sidecars.
+func (e *columnCacheEntry) filter(root [32]byte, kc columnSafeCommitmentArray) ([]blocks.ROColumn, error) {
+
+	var commitConcat []byte
+	for _, c := range kc {
+		commitConcat = append(commitConcat, c...)
+	}
+	commitmentsHash := hash.Hash(commitConcat)
+
+	scs := make([]blocks.ROColumn, fieldparams.MaxColumnsPerBlock)
+	for i := uint64(0); i < fieldparams.MaxColumnsPerBlock; i++ {
+		if e.scs[i] == nil {
+			return nil, errors.Wrapf(errMissingColumnSidecar, "root=%#x, index=%#x", root, i)
+		}
+		if !bytes.Equal(commitmentsHash[:], e.scs[i].CommitmentsHash) { //todo: compare commitments one by one directly?
+			return nil, errors.Wrapf(errCommitmentsHashMismatch, "root=%#x, index=%#x, commitmentsHash=%#x, the calculated hash of block commitments=%#x", root, i, e.scs[i].CommitmentsHash, commitmentsHash)
+		}
+		scs[i] = *e.scs[i]
+	}
+
+	return scs, nil
+}
+
 // safeCommitmentArray is a fixed size array of commitment byte slices. This is helpful for avoiding
 // gratuitous bounds checks.
 type safeCommitmentArray [fieldparams.MaxBlobsPerBlock][]byte
@@ -114,4 +192,17 @@ func (s safeCommitmentArray) count() int {
 		}
 	}
 	return fieldparams.MaxBlobsPerBlock
+}
+
+// columnSafeCommitmentArray is a fixed size array of commitment byte slices. This is helpful for avoiding
+// gratuitous bounds checks.
+type columnSafeCommitmentArray [fieldparams.MaxColumnsPerBlock][]byte
+
+func (s columnSafeCommitmentArray) count() int {
+	for i := range s {
+		if s[i] == nil {
+			return i
+		}
+	}
+	return fieldparams.MaxColumnsPerBlock
 }

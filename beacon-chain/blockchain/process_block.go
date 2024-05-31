@@ -233,7 +233,179 @@ func (s *Service) onBlockBatch(ctx context.Context, blks []consensusblocks.ROBlo
 			}
 		}
 		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
-			return errors.Wrapf(err, "could not validate blob data availability at slot %d", b.Block().Slot())
+			return errors.Wrapf(err, "could not validate blob data availability availability at slot %d", b.Block().Slot())
+		}
+		args := &forkchoicetypes.BlockAndCheckpoints{Block: b.Block(),
+			JustifiedCheckpoint: jCheckpoints[i],
+			FinalizedCheckpoint: fCheckpoints[i]}
+		pendingNodes[len(blks)-i-1] = args
+		if err := s.saveInitSyncBlock(ctx, root, b); err != nil {
+			tracing.AnnotateError(span, err)
+			return err
+		}
+		if err := s.cfg.BeaconDB.SaveStateSummary(ctx, &ethpb.StateSummary{
+			Slot: b.Block().Slot(),
+			Root: root[:],
+		}); err != nil {
+			tracing.AnnotateError(span, err)
+			return err
+		}
+		if i > 0 && jCheckpoints[i].Epoch > jCheckpoints[i-1].Epoch {
+			if err := s.cfg.BeaconDB.SaveJustifiedCheckpoint(ctx, jCheckpoints[i]); err != nil {
+				tracing.AnnotateError(span, err)
+				return err
+			}
+		}
+		if i > 0 && fCheckpoints[i].Epoch > fCheckpoints[i-1].Epoch {
+			if err := s.updateFinalized(ctx, fCheckpoints[i]); err != nil {
+				tracing.AnnotateError(span, err)
+				return err
+			}
+		}
+	}
+	// Save boundary states that will be useful for forkchoice
+	for r, st := range boundaries {
+		if err := s.cfg.StateGen.SaveState(ctx, r, st); err != nil {
+			return err
+		}
+	}
+	lastB := blks[len(blks)-1]
+	lastBR := lastB.Root()
+	// Also saves the last post state which to be used as pre state for the next batch.
+	if err := s.cfg.StateGen.SaveState(ctx, lastBR, preState); err != nil {
+		return err
+	}
+	// Insert all nodes but the last one to forkchoice
+	if err := s.cfg.ForkChoiceStore.InsertChain(ctx, pendingNodes); err != nil {
+		return errors.Wrap(err, "could not insert batch to forkchoice")
+	}
+	// Insert the last block to forkchoice
+	if err := s.cfg.ForkChoiceStore.InsertNode(ctx, preState, lastBR); err != nil {
+		return errors.Wrap(err, "could not insert last block in batch to forkchoice")
+	}
+	// Set their optimistic status
+	if isValidPayload {
+		if err := s.cfg.ForkChoiceStore.SetOptimisticToValid(ctx, lastBR); err != nil {
+			return errors.Wrap(err, "could not set optimistic block to valid")
+		}
+	}
+	arg := &fcuConfig{
+		headState: preState,
+		headRoot:  lastBR,
+		headBlock: lastB,
+	}
+	if _, err := s.notifyForkchoiceUpdate(ctx, arg); err != nil {
+		return err
+	}
+	return s.saveHeadNoDB(ctx, lastB, lastBR, preState, !isValidPayload)
+}
+
+func (s *Service) onBlockBatch2(ctx context.Context, blks []consensusblocks.ROBlock, avs das.ColumnAvailabilityStore) error {
+	ctx, span := trace.StartSpan(ctx, "blockChain.onBlockBatch")
+	defer span.End()
+
+	if len(blks) == 0 {
+		return errors.New("no blocks provided")
+	}
+
+	if err := consensusblocks.BeaconBlockIsNil(blks[0]); err != nil {
+		return invalidBlock{error: err}
+	}
+	b := blks[0].Block()
+
+	// Retrieve incoming block's pre state.
+	if err := s.verifyBlkPreState(ctx, b); err != nil {
+		return err
+	}
+	preState, err := s.cfg.StateGen.StateByRootInitialSync(ctx, b.ParentRoot())
+	if err != nil {
+		return err
+	}
+	if preState == nil || preState.IsNil() {
+		return fmt.Errorf("nil pre state for slot %d", b.Slot())
+	}
+
+	// Fill in missing blocks
+	if err := s.fillInForkChoiceMissingBlocks(ctx, blks[0].Block(), preState.CurrentJustifiedCheckpoint(), preState.FinalizedCheckpoint()); err != nil {
+		return errors.Wrap(err, "could not fill in missing blocks to forkchoice")
+	}
+
+	jCheckpoints := make([]*ethpb.Checkpoint, len(blks))
+	fCheckpoints := make([]*ethpb.Checkpoint, len(blks))
+	sigSet := bls.NewSet()
+	type versionAndHeader struct {
+		version int
+		header  interfaces.ExecutionData
+	}
+	preVersionAndHeaders := make([]*versionAndHeader, len(blks))
+	postVersionAndHeaders := make([]*versionAndHeader, len(blks))
+	var set *bls.SignatureBatch
+	boundaries := make(map[[32]byte]state.BeaconState)
+	for i, b := range blks {
+		v, h, err := getStateVersionAndPayload(preState)
+		if err != nil {
+			return err
+		}
+		preVersionAndHeaders[i] = &versionAndHeader{
+			version: v,
+			header:  h,
+		}
+
+		set, preState, err = transition.ExecuteStateTransitionNoVerifyAnySig(ctx, preState, b)
+		if err != nil {
+			return invalidBlock{error: err}
+		}
+		// Save potential boundary states.
+		if slots.IsEpochStart(preState.Slot()) {
+			boundaries[b.Root()] = preState.Copy()
+		}
+		jCheckpoints[i] = preState.CurrentJustifiedCheckpoint()
+		fCheckpoints[i] = preState.FinalizedCheckpoint()
+
+		v, h, err = getStateVersionAndPayload(preState)
+		if err != nil {
+			return err
+		}
+		postVersionAndHeaders[i] = &versionAndHeader{
+			version: v,
+			header:  h,
+		}
+		sigSet.Join(set)
+	}
+
+	var verify bool
+	if features.Get().EnableVerboseSigVerification {
+		verify, err = sigSet.VerifyVerbosely()
+	} else {
+		verify, err = sigSet.Verify()
+	}
+	if err != nil {
+		return invalidBlock{error: err}
+	}
+	if !verify {
+		return errors.New("batch block signature verification failed")
+	}
+
+	// blocks have been verified, save them and call the engine
+	pendingNodes := make([]*forkchoicetypes.BlockAndCheckpoints, len(blks))
+	var isValidPayload bool
+	for i, b := range blks {
+		root := b.Root()
+		isValidPayload, err = s.notifyNewPayload(ctx,
+			postVersionAndHeaders[i].version,
+			postVersionAndHeaders[i].header, b)
+		if err != nil {
+			return s.handleInvalidExecutionError(ctx, err, root, b.Block().ParentRoot())
+		}
+		if isValidPayload {
+			if err := s.validateMergeTransitionBlock(ctx, preVersionAndHeaders[i].version,
+				preVersionAndHeaders[i].header, b); err != nil {
+				return err
+			}
+		}
+		//log.Debug("in onBlockBatch2, before avs.IsDataAvailable")
+		if err := avs.IsDataAvailable(ctx, s.CurrentSlot(), b); err != nil {
+			return errors.Wrapf(err, "could not validate column data availability availability at slot %d", b.Block().Slot())
 		}
 		args := &forkchoicetypes.BlockAndCheckpoints{Block: b.Block(),
 			JustifiedCheckpoint: jCheckpoints[i],
@@ -514,6 +686,35 @@ func missingIndices(bs *filesystem.BlobStorage, root [32]byte, expected [][]byte
 	return missing, nil
 }
 
+// missingColumnIndices uses the expected commitments from the block to determine
+// which ColumnSidecar indices would need to be in the database for DA success.
+// It returns a map where each key represents a missing ColumnSidecar index.
+// An empty map means we have all indices; a non-empty map can be used to compare incoming
+// ColumnSidecars against the set of known missing sidecars.
+func missingColumnIndices(cs *filesystem.ColumnStorage, root [32]byte, expected [][]byte) (map[uint64]struct{}, error) {
+	if len(expected) == 0 {
+		return nil, nil
+	}
+	if len(expected) > fieldparams.MaxBlobsPerBlock {
+		return nil, errMaxBlobsExceeded
+	}
+	//log.Debugf("func missingColumnIndices, before cs.Indices(root), root is %s", root)
+	indices, err := cs.Indices(root)
+	if err != nil {
+		return nil, err
+	}
+	//log.Debugf("func missingColumnIndices, after cs.Indices(root), len(indices) is %d", len(indices))
+	missing := make(map[uint64]struct{}, fieldparams.MaxColumnsPerBlock)
+	for i := 0; i < fieldparams.MaxColumnsPerBlock; i++ {
+		ui := uint64(i)
+		if !indices[i] {
+			missing[ui] = struct{}{}
+		}
+
+	}
+	return missing, nil
+}
+
 // isDataAvailable blocks until all BlobSidecars committed to in the block are available,
 // or an error or context cancellation occurs. A nil result means that the data availability check is successful.
 // The function will first check the database to see if all sidecars have been persisted. If any
@@ -528,8 +729,8 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if block == nil {
 		return errors.New("invalid nil beacon block")
 	}
-	// We are only required to check within MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS
-	if !params.WithinDAPeriod(slots.ToEpoch(block.Slot()), slots.ToEpoch(s.CurrentSlot())) {
+	// We are only required to check within MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS
+	if !params.WithinColumnDAPeriod(slots.ToEpoch(block.Slot()), slots.ToEpoch(s.CurrentSlot())) {
 		return nil
 	}
 
@@ -546,19 +747,20 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if expected == 0 {
 		return nil
 	}
-	// get a map of BlobSidecar indices that are not currently available.
-	missing, err := missingIndices(s.blobStorage, root, kzgCommitments)
+	// get a map of ColumnSidecar indices that are not currently available.
+	missing, err := missingColumnIndices(s.columnStorage, root, kzgCommitments)
 	if err != nil {
 		return err
 	}
-	// If there are no missing indices, all BlobSidecars are available.
+	// If there are no missing indices, all ColumnSidecars are available.
 	if len(missing) == 0 {
 		return nil
 	}
+	log.Debugf("len(missing) is %d", len(missing))
 
-	// The gossip handler for blobs writes the index of each verified blob referencing the given
-	// root to the channel returned by blobNotifiers.forRoot.
-	nc := s.blobNotifiers.forRoot(root)
+	// The gossip handler for columns writes the index of each verified column referencing the given
+	// root to the channel returned by columnNotifiers.forRoot.
+	nc := s.columnNotifiers.forRoot(root)
 
 	// Log for DA checks that cross over into the next slot; helpful for debugging.
 	nextSlot := slots.BeginsAt(signed.Block().Slot()+1, s.genesisTime)
@@ -576,6 +778,7 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	for {
 		select {
 		case idx := <-nc:
+			//log.Debugf("for select case idx: len(missing) is %d", len(missing))
 			// Delete each index seen in the notification channel.
 			delete(missing, idx)
 			// Read from the channel until there are no more missing sidecars.
@@ -583,10 +786,11 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 				continue
 			}
 			// Once all sidecars have been observed, clean up the notification channel.
-			s.blobNotifiers.delete(root)
+			s.columnNotifiers.delete(root)
 			return nil
 		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), "context deadline waiting for blob sidecars slot: %d, BlockRoot: %#x", block.Slot(), root)
+			//log.Debugf("for select case ctx.Done: len(missing) is %d", len(missing))
+			return errors.Wrapf(ctx.Err(), "context deadline waiting for column sidecars slot: %d, BlockRoot: %#x", block.Slot(), root)
 		}
 	}
 }

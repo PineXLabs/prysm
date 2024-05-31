@@ -218,13 +218,16 @@ type BeaconChainConfig struct {
 	ExecutionEngineTimeoutValue uint64 // ExecutionEngineTimeoutValue defines the seconds to wait before timing out engine endpoints with execution payload execution semantics (newPayload, forkchoiceUpdated).
 
 	// Subnet value
-	BlobsidecarSubnetCount uint64 `yaml:"BLOB_SIDECAR_SUBNET_COUNT"` // BlobsidecarSubnetCount is the number of blobsidecar subnets used in the gossipsub protocol.
+	BlobsidecarSubnetCount   uint64 `yaml:"BLOB_SIDECAR_SUBNET_COUNT"`   // BlobsidecarSubnetCount is the number of blobsidecar subnets used in the gossipsub protocol.
+	ColumnsidecarSubnetCount uint64 `yaml:"COLUMN_SIDECAR_SUBNET_COUNT"` // ColumnsidecarSubnetCount is the number of columnsidecar subnets used in the gossipsub protocol.
 
 	// Values introduced in Deneb hard fork
-	MaxPerEpochActivationChurnLimit  uint64           `yaml:"MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT" spec:"true"`  // MaxPerEpochActivationChurnLimit is the maximum amount of churn allotted for validator activation.
-	MinEpochsForBlobsSidecarsRequest primitives.Epoch `yaml:"MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS" spec:"true"` // MinEpochsForBlobsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
-	MaxRequestBlobSidecars           uint64           `yaml:"MAX_REQUEST_BLOB_SIDECARS" spec:"true"`             // MaxRequestBlobSidecars is the maximum number of blobs to request in a single request.
-	MaxRequestBlocksDeneb            uint64           `yaml:"MAX_REQUEST_BLOCKS_DENEB" spec:"true"`              // MaxRequestBlocksDeneb is the maximum number of blocks in a single request after the deneb epoch.
+	MaxPerEpochActivationChurnLimit    uint64           `yaml:"MAX_PER_EPOCH_ACTIVATION_CHURN_LIMIT" spec:"true"`    // MaxPerEpochActivationChurnLimit is the maximum amount of churn allotted for validator activation.
+	MinEpochsForBlobsSidecarsRequest   primitives.Epoch `yaml:"MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS" spec:"true"`   // MinEpochsForBlobsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
+	MinEpochsForColumnsSidecarsRequest primitives.Epoch `yaml:"MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS" spec:"true"` // MinEpochsForColumnsSidecarsRequest is the minimum number of epochs the node will keep the blobs for.
+	MaxRequestBlobSidecars             uint64           `yaml:"MAX_REQUEST_BLOB_SIDECARS" spec:"true"`               // MaxRequestBlobSidecars is the maximum number of blobs to request in a single request.
+	MaxRequestColumnSidecars           uint64           `yaml:"MAX_REQUEST_COLUMN_SIDECARS" spec:"true"`             // MaxRequestColumnSidecars is the maximum number of columns to request in a single request.
+	MaxRequestBlocksDeneb              uint64           `yaml:"MAX_REQUEST_BLOCKS_DENEB" spec:"true"`                // MaxRequestBlocksDeneb is the maximum number of blocks in a single request after the deneb epoch.
 
 	// Networking Specific Parameters
 	GossipMaxSize                   uint64          `yaml:"GOSSIP_MAX_SIZE" spec:"true"`                    // GossipMaxSize is the maximum allowed size of uncompressed gossip messages.
@@ -328,4 +331,9 @@ func DenebEnabled() bool {
 // WithinDAPeriod checks if the block epoch is within MIN_EPOCHS_FOR_BLOB_SIDECARS_REQUESTS of the given current epoch.
 func WithinDAPeriod(block, current primitives.Epoch) bool {
 	return block+BeaconConfig().MinEpochsForBlobsSidecarsRequest >= current
+}
+
+// WithinColumnDAPeriod checks if the block epoch is within MIN_EPOCHS_FOR_COLUMN_SIDECARS_REQUESTS of the given current epoch.
+func WithinColumnDAPeriod(block, current primitives.Epoch) bool {
+	return block+BeaconConfig().MinEpochsForColumnsSidecarsRequest >= current
 }

@@ -258,12 +258,15 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ExecutionEngineTimeoutValue: 8, // 8 seconds default based on: https://github.com/ethereum/execution-apis/blob/main/src/engine/specification.md#core
 
 	// Subnet value
-	BlobsidecarSubnetCount: 6,
+	BlobsidecarSubnetCount:   6,
+	ColumnsidecarSubnetCount: 128,
 
-	MaxPerEpochActivationChurnLimit:  8,
-	MinEpochsForBlobsSidecarsRequest: 4096,
-	MaxRequestBlobSidecars:           768,
-	MaxRequestBlocksDeneb:            128,
+	MaxPerEpochActivationChurnLimit:    8,
+	MinEpochsForBlobsSidecarsRequest:   4096,
+	MinEpochsForColumnsSidecarsRequest: 4096,
+	MaxRequestBlobSidecars:             768,
+	MaxRequestColumnSidecars:           768,
+	MaxRequestBlocksDeneb:              128,
 
 	// Values related to networking parameters.
 	GossipMaxSize:                   10 * 1 << 20, // 10 MiB
