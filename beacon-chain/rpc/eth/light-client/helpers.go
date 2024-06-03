@@ -309,6 +309,5 @@ func newLightClientUpdateToJSON(input *v2.LightClientUpdate) *structs.LightClien
 		FinalityBranch:          branchToJSON(input.FinalityBranch),
 		SyncAggregate:           syncAggregateToJSON(input.SyncAggregate),
 		SignatureSlot:           strconv.FormatUint(uint64(input.SignatureSlot), 10),
-		BlobCommitments:         branchToJSON(input.BlobCommitments),
 	}
 }

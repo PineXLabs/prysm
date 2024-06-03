@@ -149,11 +149,6 @@ func NewLightClientOptimisticUpdateFromBeaconState(
 		SyncAggregate:  syncAggregateResult,
 		SignatureSlot:  block.Block().Slot(),
 	}
-
-	if comms, err := block.Block().Body().BlobKzgCommitments(); err == nil {
-		result.BlobCommitments = comms
-	}
-
 	return result, nil
 }
 
@@ -229,10 +224,6 @@ func NewLightClientFinalityUpdateFromBeaconState(
 
 	result.FinalizedHeader = finalizedHeader
 	result.FinalityBranch = finalityBranch
-
-	if comms, err := block.Block().Body().BlobKzgCommitments(); err == nil {
-		result.BlobCommitments = comms
-	}
 	return result, nil
 }
 

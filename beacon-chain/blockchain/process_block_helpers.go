@@ -159,6 +159,7 @@ func (s *Service) tryPublishLightClientFinalityUpdate(ctx context.Context, signe
 func (s *Service) sendLightClientFinalityUpdate(ctx context.Context, signed interfaces.ReadOnlySignedBeaconBlock,
 	postState state.BeaconState) (int, error) {
 	// Get attested state
+
 	attestedRoot := signed.Block().ParentRoot()
 	attestedState, err := s.cfg.StateGen.StateByRoot(ctx, attestedRoot)
 	if err != nil {
@@ -186,6 +187,11 @@ func (s *Service) sendLightClientFinalityUpdate(ctx context.Context, signed inte
 
 	if err != nil {
 		return 0, errors.Wrap(err, "could not create light client update")
+	}
+
+	blobCommitments, err := signed.Block().Body().BlobKzgCommitments()
+	if err == nil {
+		update.BlobCommitments = blobCommitments
 	}
 
 	// Return the result
@@ -221,7 +227,10 @@ func (s *Service) sendLightClientOptimisticUpdate(ctx context.Context, signed in
 	if err != nil {
 		return 0, errors.Wrap(err, "could not create light client update")
 	}
-
+	blobCommitments, err := signed.Block().Body().BlobKzgCommitments()
+	if err == nil {
+		update.BlobCommitments = blobCommitments
+	}
 	// Return the result
 	result := &ethpbv2.LightClientOptimisticUpdateWithVersion{
 		Version: ethpbv2.Version(signed.Version()),
