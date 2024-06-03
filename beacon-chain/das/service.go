@@ -8,6 +8,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 	errors "github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	lruwrpr "github.com/prysmaticlabs/prysm/v5/cache/lru"
@@ -97,6 +98,7 @@ type Config struct {
 	columnStorage  *filesystem.ColumnStorage
 	dataStorePath  string
 	bootstrapNodes []string
+	dhtListenMa    multiaddr.Multiaddr
 }
 
 type Option func(cfg *Config)
@@ -122,6 +124,12 @@ func WithDataStorePath(path string) Option {
 func WithBootStrapNodes(url []string) Option {
 	return func(cfg *Config) {
 		cfg.bootstrapNodes = url
+	}
+}
+
+func WithDhtListenMa(address multiaddr.Multiaddr) Option {
+	return func(cfg *Config) {
+		cfg.dhtListenMa = address
 	}
 }
 
@@ -159,6 +167,7 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 		dill_das.WithDataTTL(time.Duration(params.BeaconConfig().DhtDataTTL)),
 		dill_das.WithDasLogger(log),
 		dill_das.WithBootstrapNodes(infos),
+		dill_das.WithListenAddress(cfg.dhtListenMa),
 	}
 	if cfg.dataStorePath != "" {
 		dillDasOpts = append(dillDasOpts, dill_das.WithDatastorePath(cfg.dataStorePath))

@@ -18,6 +18,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	apigateway "github.com/prysmaticlabs/prysm/v5/api/gateway"
 	"github.com/prysmaticlabs/prysm/v5/api/server"
@@ -66,6 +67,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/container/slice"
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	"github.com/prysmaticlabs/prysm/v5/monitoring/prometheus"
+	prysmnetwork "github.com/prysmaticlabs/prysm/v5/network"
 	"github.com/prysmaticlabs/prysm/v5/runtime"
 	"github.com/prysmaticlabs/prysm/v5/runtime/debug"
 	"github.com/prysmaticlabs/prysm/v5/runtime/prereqs"
@@ -1195,7 +1197,13 @@ func (b *BeaconNode) registerBuilderService(cliCtx *cli.Context) error {
 func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
 	opts := b.serviceFlagOpts.dasOpts
 	h := b.fetchP2P().Host()
-	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(h))
+	ipAddr := prysmnetwork.IPAddr()
+	extraAddr := fmt.Sprintf("/ip4/%s/tcp/%d", ipAddr, cmd.DHTTCPPort.Value)
+	addr, err := multiaddr.NewMultiaddr(extraAddr)
+	if err != nil {
+		return err
+	}
+	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(h), das.WithDhtListenMa(addr))
 	svc, err := das.NewService(b.ctx, opts...)
 	if err != nil {
 		return err
