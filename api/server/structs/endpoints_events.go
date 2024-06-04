@@ -102,6 +102,7 @@ type LightClientFinalityUpdate struct {
 	FinalityBranch  []string           `json:"finality_branch"`
 	SyncAggregate   *SyncAggregate     `json:"sync_aggregate"`
 	SignatureSlot   string             `json:"signature_slot"`
+	BlobCommitments []string           `json:"blob_commitments,omitempty"`
 }
 
 type LightClientOptimisticUpdateEvent struct {
@@ -110,7 +111,8 @@ type LightClientOptimisticUpdateEvent struct {
 }
 
 type LightClientOptimisticUpdate struct {
-	AttestedHeader *BeaconBlockHeader `json:"attested_header"`
-	SyncAggregate  *SyncAggregate     `json:"sync_aggregate"`
-	SignatureSlot  string             `json:"signature_slot"`
+	AttestedHeader  *BeaconBlockHeader `json:"attested_header"`
+	SyncAggregate   *SyncAggregate     `json:"sync_aggregate"`
+	SignatureSlot   string             `json:"signature_slot"`
+	BlobCommitments []string           `json:"blob_commitments,omitempty"`
 }

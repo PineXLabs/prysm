@@ -246,6 +246,7 @@ func handleBlockOperationEvents(w http.ResponseWriter, flusher http.Flusher, req
 func (s *Server) handleStateEvents(ctx context.Context, w http.ResponseWriter, flusher http.Flusher, requestedTopics map[string]bool, event *feed.Event) error {
 	switch event.Type {
 	case statefeed.NewHead:
+		log.Debug("NewHead event received")
 		if _, ok := requestedTopics[HeadTopic]; ok {
 			headData, ok := event.Data.(*ethpb.EventHead)
 			if !ok {
@@ -285,6 +286,7 @@ func (s *Server) handleStateEvents(ctx context.Context, w http.ResponseWriter, f
 		}
 		return send(w, flusher, FinalizedCheckpointTopic, checkpoint)
 	case statefeed.LightClientFinalityUpdate:
+		log.Debug("LightClientFinalityUpdate event received")
 		if _, ok := requestedTopics[LightClientFinalityUpdateTopic]; !ok {
 			return nil
 		}
@@ -318,11 +320,13 @@ func (s *Server) handleStateEvents(ctx context.Context, w http.ResponseWriter, f
 					SyncCommitteeBits:      hexutil.Encode(updateData.Data.SyncAggregate.SyncCommitteeBits),
 					SyncCommitteeSignature: hexutil.Encode(updateData.Data.SyncAggregate.SyncCommitteeSignature),
 				},
-				SignatureSlot: fmt.Sprintf("%d", updateData.Data.SignatureSlot),
+				SignatureSlot:   fmt.Sprintf("%d", updateData.Data.SignatureSlot),
+				BlobCommitments: commitmentsToJSON(updateData.Data.BlobCommitments),
 			},
 		}
 		return send(w, flusher, LightClientFinalityUpdateTopic, update)
 	case statefeed.LightClientOptimisticUpdate:
+		log.Debug("LightClientOptimisticUpdate event received")
 		if _, ok := requestedTopics[LightClientOptimisticUpdateTopic]; !ok {
 			return nil
 		}
@@ -344,7 +348,8 @@ func (s *Server) handleStateEvents(ctx context.Context, w http.ResponseWriter, f
 					SyncCommitteeBits:      hexutil.Encode(updateData.Data.SyncAggregate.SyncCommitteeBits),
 					SyncCommitteeSignature: hexutil.Encode(updateData.Data.SyncAggregate.SyncCommitteeSignature),
 				},
-				SignatureSlot: fmt.Sprintf("%d", updateData.Data.SignatureSlot),
+				SignatureSlot:   fmt.Sprintf("%d", updateData.Data.SignatureSlot),
+				BlobCommitments: commitmentsToJSON(updateData.Data.BlobCommitments),
 			},
 		}
 		return send(w, flusher, LightClientOptimisticUpdateTopic, update)
@@ -511,4 +516,15 @@ func write(w http.ResponseWriter, flusher http.Flusher, format string, a ...any)
 	}
 	flusher.Flush()
 	return nil
+}
+
+func commitmentsToJSON(commitmentBytes [][]byte) []string {
+	if commitmentBytes == nil {
+		return nil
+	}
+	comms := make([]string, len(commitmentBytes))
+	for i, root := range commitmentBytes {
+		comms[i] = hexutil.Encode(root)
+	}
+	return comms
 }

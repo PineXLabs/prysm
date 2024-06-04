@@ -121,6 +121,12 @@ var (
 		Usage: "The port used by libp2p.",
 		Value: 13000,
 	}
+	// DHTTCPPort defines the port to be used by libp2p dht.
+	DHTTCPPort = &cli.IntFlag{
+		Name:  "dht-tcp-port",
+		Usage: "The port used by libp2p.",
+		Value: 13500,
+	}
 	// P2PIP defines the local IP to be used by libp2p.
 	P2PIP = &cli.StringFlag{
 		Name:  "p2p-local-ip",

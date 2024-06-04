@@ -19,6 +19,7 @@ type LightClientUpdate struct {
 	NextSyncCommitteeBranch []string           `json:"next_sync_committee_branch,omitempty"`
 	FinalityBranch          []string           `json:"finality_branch,omitempty"`
 	SignatureSlot           string             `json:"signature_slot"`
+	BlobCommitments         []string           `json:"blob_commitments,omitempty"`
 }
 
 type LightClientUpdateWithVersion struct {

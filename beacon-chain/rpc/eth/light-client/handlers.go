@@ -282,7 +282,9 @@ func (s *Server) GetLightClientFinalityUpdate(w http.ResponseWriter, req *http.R
 		httputil.HandleError(w, "could not get light client finality update: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	if comms, err := attestedBlock.Block().Body().BlobKzgCommitments(); err == nil {
+		update.BlobCommitments = branchToJSON(comms)
+	}
 	response := &structs.LightClientUpdateWithVersion{
 		Version: version.String(attestedState.Version()),
 		Data:    update,
@@ -339,7 +341,9 @@ func (s *Server) GetLightClientOptimisticUpdate(w http.ResponseWriter, req *http
 		httputil.HandleError(w, "could not get light client optimistic update: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	if comms, err := attestedBlock.Block().Body().BlobKzgCommitments(); err == nil {
+		update.BlobCommitments = branchToJSON(comms)
+	}
 	response := &structs.LightClientUpdateWithVersion{
 		Version: version.String(attestedState.Version()),
 		Data:    update,
