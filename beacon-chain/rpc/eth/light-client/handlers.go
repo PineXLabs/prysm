@@ -13,7 +13,6 @@ import (
 
 	"github.com/wealdtech/go-bytesutil"
 
-	"github.com/prysmaticlabs/prysm/v5/beacon-chain/core/deneb"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/rpc/eth/shared"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
@@ -343,8 +342,6 @@ func (s *Server) GetLightClientOptimisticUpdate(w http.ResponseWriter, req *http
 		return
 	}
 	if comms, err := attestedBlock.Block().Body().BlobKzgCommitments(); err == nil {
-		dneb, _ := attestedBlock.PbDenebBlock()
-		dneb.Block
 		update.BlobCommitments = branchToJSON(comms)
 	}
 	response := &structs.LightClientUpdateWithVersion{
