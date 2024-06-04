@@ -25,7 +25,7 @@ mainnet = {
     "extra_data.size": "32",
     "max_blobs_per_block.size": "64",
     "max_columns_per_block.size": "128",
-    "max_blob_commitments.size": "4096",
+    "max_blob_commitments.size": "8192",
     "kzg_commitment_inclusion_proof_depth.size": "17",
     "segment.size": "2048",  #  64 * [32]byte
 }
