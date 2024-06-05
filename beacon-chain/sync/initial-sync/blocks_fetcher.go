@@ -654,8 +654,10 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 	}
 	requestedCols := p2p.SubnetsToColumns(subnets)
 	req.SlotCols = make([]*p2ppb.ColumnSidecarsByRangeRequest_SlotColumns, req.Count)
-	for _, col := range req.SlotCols {
-		col.Columns = requestedCols
+	for i := range req.SlotCols {
+		req.SlotCols[i] = &p2ppb.ColumnSidecarsByRangeRequest_SlotColumns{
+			Columns: requestedCols,
+		}
 	}
 	startColumnIndex := requestedCols[0]
 	genRoot := f.clock.GenesisValidatorsRoot()

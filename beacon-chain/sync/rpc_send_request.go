@@ -356,10 +356,6 @@ func (sbv *seqColumnValid) nextValid(column blocks.ROColumn) error {
 		return errColumnIndexOutOfBounds
 	}
 	if sbv.prev == nil {
-		// The first column we see for a block must have index 0.
-		if column.Index != 0 {
-			return errChunkResponseIndexNotAsc
-		}
 		sbv.prev = &column
 		return nil
 	}
@@ -370,19 +366,11 @@ func (sbv *seqColumnValid) nextValid(column blocks.ROColumn) error {
 		if sbv.prev.ParentRoot() != column.ParentRoot() {
 			return errors.Wrap(errChunkResponseBlockMismatch, "block parent roots do not match")
 		}
-		// Column indices in responses should be strictly monotonically incrementing.
-		if column.Index != sbv.prev.Index+1 {
-			return errChunkResponseIndexNotAsc
-		}
 	} else {
 		// If the slot is adjacent we know there are no intervening blocks with missing columns, so we can
 		// check that the new column descends from the last seen.
 		if column.Slot() == sbv.prev.Slot()+1 && column.ParentRoot() != sbv.prev.BlockRoot() {
 			return errChunkResponseParentMismatch
-		}
-		// The first column we see for a block must have index 0.
-		if column.Index != 0 {
-			return errChunkResponseIndexNotAsc
 		}
 		// Blocks must be in ascending slot order.
 		if sbv.prev.Slot() >= column.Slot() {
