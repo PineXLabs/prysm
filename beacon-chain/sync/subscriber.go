@@ -519,7 +519,9 @@ func (s *Service) subscribeFixColumnSubnets(
 				wantedSubs := s.retrievePersistentColSubs(currentSlot)
 				// Resize as appropriate.
 				s.reValidateSubscriptions(subscriptions, wantedSubs, topicFormat, digest)
-
+				log.WithFields(logrus.Fields{
+					"wanted column subnets to listen": wantedSubs,
+				}).Debug("refresh column subnets")
 				// subscribe desired column subnets.
 				for _, idx := range wantedSubs {
 					s.subscribeColSubnet(subscriptions, idx, digest, validate, handle)

@@ -761,7 +761,7 @@ func (s *Service) isDataAvailable(ctx context.Context, root [32]byte, signed int
 	if len(missing) == 0 {
 		return nil
 	}
-	log.Debugf("len(missing) is %d", len(missing))
+	log.WithField("missing", missing).Debugf("column missing")
 
 	// The gossip handler for columns writes the index of each verified column referencing the given
 	// root to the channel returned by columnNotifiers.forRoot.

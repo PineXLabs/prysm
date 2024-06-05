@@ -274,7 +274,15 @@ func initializeFixedPersistentColumnSubnets(id enode.ID) error {
 	if ok && expTime.After(time.Now()) {
 		return nil
 	}
-	subs := computeFixSubscribedColumnSubnets(id)
+	var subs []uint64
+	if flags.Get().SubscribeToAllSubnets {
+		subnetCount := params.BeaconConfig().ColumnsidecarSubnetCount
+		for i := range subnetCount {
+			subs = append(subs, i)
+		}
+	} else {
+		subs = computeFixSubscribedColumnSubnets(id)
+	}
 	cache.SubnetIDs.AddPersistentColumnSubnets(subs, 0)
 	return nil
 }
