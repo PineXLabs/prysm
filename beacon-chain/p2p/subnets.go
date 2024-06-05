@@ -28,7 +28,7 @@ import (
 var attestationSubnetCount = params.BeaconConfig().AttestationSubnetCount
 var syncCommsSubnetCount = params.BeaconConfig().SyncCommitteeSubnetCount
 
-var colSubnetCount uint64 = params.BeaconConfig().ColumnsidecarSubnetCount
+var colSubnetCount = params.BeaconConfig().ColumnsidecarSubnetCount
 
 var attSubnetEnrKey = params.BeaconNetworkConfig().AttSubnetKey
 var syncCommsSubnetEnrKey = params.BeaconNetworkConfig().SyncCommsSubnetKey
@@ -240,7 +240,7 @@ func (s *Service) updateSubnetRecordWithMetadataV2(bitVAtt bitfield.Bitvector64,
 	})
 }
 
-func (s *Service) updateSubnetRecordWithMetadataV3(bitVAtt bitfield.Bitvector64, bitVSync bitfield.Bitvector4, bitVCol bitfield.Bitvector64) {
+func (s *Service) updateSubnetRecordWithMetadataV3(bitVAtt bitfield.Bitvector64, bitVSync bitfield.Bitvector4, bitVCol bitfield.Bitvector128) {
 	entry := enr.WithEntry(attSubnetEnrKey, &bitVAtt)
 	subEntry := enr.WithEntry(syncCommsSubnetEnrKey, &bitVSync)
 	colEntry := enr.WithEntry(colSubnetEnrKey, &bitVCol)
@@ -476,8 +476,8 @@ func attBitvector(record *enr.Record) (bitfield.Bitvector64, error) {
 
 // Parses the column das subnets ENR entry in a node and extracts its value
 // as a bitvector for further manipulation.
-func colBitvector(record *enr.Record) (bitfield.Bitvector64, error) {
-	bitC := bitfield.NewBitvector64()
+func colBitvector(record *enr.Record) (bitfield.Bitvector128, error) {
+	bitC := bitfield.NewBitvector128()
 	entry := enr.WithEntry(colSubnetEnrKey, &bitC)
 	err := record.Load(entry)
 	if err != nil {

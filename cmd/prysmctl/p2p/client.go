@@ -223,7 +223,7 @@ func readMetadata() (metadata.Metadata, error) {
 	metaData := &pb.MetaDataV2{
 		SeqNumber: 0,
 		Attnets:   bitfield.NewBitvector64(),
-		Colnets:   bitfield.NewBitvector64(),
+		Colnets:   bitfield.NewBitvector128(),
 	}
 	return wrapper.WrappedMetadataV2(metaData), nil
 }

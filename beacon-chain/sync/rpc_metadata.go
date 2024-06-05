@@ -91,7 +91,7 @@ func (s *Service) metaDataHandler(_ context.Context, _ interface{}, stream libp2
 					Attnets:   currMd.AttnetsBitfield(),
 					SeqNumber: currMd.SequenceNumber(),
 					Syncnets:  syncnets,
-					Colnets:   bitfield.NewBitvector64(),
+					Colnets:   bitfield.NewBitvector128(),
 				})
 		}
 	}

@@ -111,7 +111,7 @@ func (s *Service) RefreshENR() {
 			log.WithError(err).Error("Could not retrieve sync bitfield")
 			return
 		}
-		bitC := bitfield.NewBitvector64()
+		bitC := bitfield.NewBitvector128()
 		colSubnets := cache.SubnetIDs.GetAllColumnSubnets()
 		for _, idx := range colSubnets {
 			bitC.SetBitAt(idx, true)

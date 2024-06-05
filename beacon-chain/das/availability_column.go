@@ -104,6 +104,7 @@ func (s *ColumnLazilyPersistentStore) IsDataAvailable(ctx context.Context, curre
 	// We don't try to salvage problematic batches because this indicates a misbehaving peer and we'd rather
 	// ignore their response and decrease their peer score.
 	filter := s.filterFactory(current, b.Root())
+	log.WithField("column filter", filter).Debug("verifying column availability")
 	sidecars, err := entry.filter(root, filter, blockCommitments)
 	if err != nil {
 		return errors.Wrap(err, "incomplete ColumnSidecar batch")
