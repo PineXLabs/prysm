@@ -358,7 +358,10 @@ func (vs *Server) handleUnblindedBlockToCols(block interfaces.SignedBeaconBlock,
 	if dbBlockContents == nil {
 		return nil, nil
 	}
-	log.Debugln("Begin buildColumnSidecars")
+	log.WithFields(logrus.Fields{
+		"blob num": len(dbBlockContents.Blobs),
+		"kzg num":  len(dbBlockContents.KzgProofs),
+	}).Debugln("Begin buildColumnSidecars")
 	return buildColumnSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
 }
 
