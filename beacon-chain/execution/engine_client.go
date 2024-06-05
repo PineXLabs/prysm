@@ -264,6 +264,10 @@ func (s *Service) GetPayload(ctx context.Context, payloadId [8]byte, slot primit
 		if err != nil {
 			return nil, nil, false, err
 		}
+		log.WithFields(logrus.Fields{
+			"proof count": len(result.BlobsBundle.Proofs),
+			"blob count":  len(result.BlobsBundle.Blobs),
+		}).Debug("get payload called, proof count should equal to blob_num * (128 + 1)")
 		return ed, result.BlobsBundle, result.ShouldOverrideBuilder, nil
 	}
 

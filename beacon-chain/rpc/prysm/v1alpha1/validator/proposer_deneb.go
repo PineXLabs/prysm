@@ -13,6 +13,7 @@ import (
 	enginev1 "github.com/prysmaticlabs/prysm/v5/proto/engine/v1"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
+	"github.com/sirupsen/logrus"
 )
 
 var bundleCache = &blobsBundleCache{}
@@ -112,7 +113,10 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	if cLen <= 0 {
 		return nil, nil // No blobs in this block.
 	}
-	log.Debugf("In buildColumnSidecars, blob count is %d", len(blobs))
+	log.WithFields(logrus.Fields{
+		"blob count":       len(blobs),
+		"total kzg proofs": len(kzgProofs),
+	}).Debug("buildColumnSidecars")
 
 	/*
 		if len(colSidecars) > 0 {
@@ -186,6 +190,9 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 			CommitmentsHash:           commitmentsHash[:],
 		}
 	}
+	log.WithFields(logrus.Fields{
+		"side cars num": len(columnSidecars),
+	}).Debug("buildColumnSidecars done")
 	return columnSidecars, nil
 }
 
