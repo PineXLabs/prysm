@@ -358,7 +358,6 @@ func (vs *Server) handleUnblindedBlockToCols(block interfaces.SignedBeaconBlock,
 	if dbBlockContents == nil {
 		return nil, nil
 	}
-	log.Debugln("Begin buildColumnSidecars")
 	return buildColumnSidecars(block, dbBlockContents.Blobs, dbBlockContents.KzgProofs)
 }
 

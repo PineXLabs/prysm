@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/PineXLabs/das"
+	"github.com/PineXLabs/das/kzg-export"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/blocks"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/interfaces"
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
@@ -12,6 +13,7 @@ import (
 	enginev1 "github.com/prysmaticlabs/prysm/v5/proto/engine/v1"
 	ethpb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
+	"github.com/sirupsen/logrus"
 )
 
 var bundleCache = &blobsBundleCache{}
@@ -104,20 +106,18 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 		return nil, err
 	}
 	cLen := len(denebBlk.Block.Body.BlobKzgCommitments)
-	if cLen != len(blobs) || cLen != len(kzgProofs) {
+	// 128 extra proofs for every blob, also one original proof for it
+	if cLen != len(blobs) || cLen*129 != len(kzgProofs) {
 		return nil, errors.New("blob KZG commitments don't match number of blobs or KZG proofs")
 	}
 	if cLen <= 0 {
 		return nil, nil // No blobs in this block.
 	}
-	log.Debugf("In buildColumnSidecars, blob count is %d", len(blobs))
+	log.WithFields(logrus.Fields{
+		"blob count":       len(blobs),
+		"total kzg proofs": len(kzgProofs),
+	}).Debug("buildColumnSidecars")
 
-	_das := das.New()
-	colSidecars, err := _das.BlobsToColumns(blobs, denebBlk.Block.Body.BlobKzgCommitments)
-	if err != nil {
-		log.Debugf("In buildColumnSidecars, BlobsToColumns failed, error is %s\n", err.Error())
-		return nil, err
-	}
 	/*
 		if len(colSidecars) > 0 {
 			for i, com := range colSidecars[0].Commitments {
@@ -163,19 +163,36 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 		commitmentInclusionProofs = append(commitmentInclusionProofs, kProof)
 	}
 	//log.Debugf("commitmentInclusionProofs, len is %d, cap is %d", len(commitmentInclusionProofs), cap(commitmentInclusionProofs))
-
-	columnSidecars := make([]*ethpb.ColumnSidecar, len(colSidecars))
-	for i := range colSidecars {
+	_das := das.New()
+	totalSegs := make([][]kzg.Evaluations, 128)
+	proofs := make([][][]byte, 128)
+	kzgProofs = kzgProofs[cLen:]
+	for i := range blobs {
+		segs, err := _das.BlobToSegmentNoProof(blobs[i])
+		if err != nil {
+			log.Debugf("In buildColumnSidecars, BlobToSegmentEcOnly failed, error is %s\n", err.Error())
+			return nil, err
+		}
+		for j := range segs {
+			totalSegs[j] = append(totalSegs[j], segs[j])
+			proofs[j] = append(proofs[j], kzgProofs[i*128+j])
+		}
+	}
+	columnSidecars := make([]*ethpb.ColumnSidecar, 128)
+	for i := range columnSidecars {
 		columnSidecars[i] = &ethpb.ColumnSidecar{
-			Index:                     uint64(colSidecars[i].ColumnNumber),
-			Segments:                  MarshalSegmentDataList(colSidecars[i].SegmentDataList),
-			BlobKzgCommitments:        MarshalCommitments(colSidecars[i].Commitments),
-			SegmentKzgProofs:          MarshalProofs(colSidecars[i].Proofs),
+			Index:                     uint64(i),
+			Segments:                  MarshalSegmentDataList(totalSegs[i]),
+			BlobKzgCommitments:        denebBlk.Block.Body.BlobKzgCommitments,
+			SegmentKzgProofs:          proofs[i],
 			SignedBlockHeader:         header,
 			CommitmentInclusionProofs: commitmentInclusionProofs,
 			CommitmentsHash:           commitmentsHash[:],
 		}
 	}
+	log.WithFields(logrus.Fields{
+		"side cars num": len(columnSidecars),
+	}).Debug("buildColumnSidecars done")
 	return columnSidecars, nil
 }
 
