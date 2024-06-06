@@ -379,6 +379,24 @@ var (
 		Usage: "To enable the use of prysm validator client in Distributed Validator Cluster",
 		Value: false,
 	}
+
+	// ExecutionRPCProviderFlag defines an execution node RPC endpoint.
+	ExecutionRPCProviderFlag = &cli.StringFlag{
+		Name:  "execution-rpc-provider",
+		Usage: "Execution node RPC provider endpoint.",
+		Value: "127.0.0.1:8545",
+	}
+
+	// DepositFileDirFlag is path to a file containing exactly one validator deposit info.
+	DepositFileDirFlag = &cli.StringFlag{
+		Name:  "deposit-file-dir",
+		Usage: "Path to a plain-text, .txt file containing a deposit info of a validator account.",
+	}
+	// DepositSignerPrivateKey is the private key of the signer who sends a deposit tx to the deposit contract.
+	DepositSignerPrivateKey = &cli.StringFlag{
+		Name:  "deposit-signer-private-key",
+		Usage: "The private key of the signer who sends a deposit tx to the eth1 deposit contract.",
+	}
 )
 
 // DefaultValidatorDir returns OS-specific default validator directory.

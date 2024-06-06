@@ -188,6 +188,34 @@ var Commands = []*cli.Command{
 					return nil
 				},
 			},
+			{
+				Name:    "deposit",
+				Aliases: []string{"d", "voluntary-stake"},
+				Usage:   "Deposit for a new validator",
+				Flags: cmd.WrapFlags([]cli.Flag{
+					flags.DepositFileDirFlag,
+					flags.DepositSignerPrivateKey,
+					flags.ExecutionRPCProviderFlag,
+				}),
+				Before: func(cliCtx *cli.Context) error {
+					if err := cmd.LoadFlagsFromConfig(cliCtx, cliCtx.Command.Flags); err != nil {
+						return err
+					}
+					if err := tos.VerifyTosAcceptedOrPrompt(cliCtx); err != nil {
+						return err
+					}
+					return nil
+				},
+				Action: func(context *cli.Context) error {
+					txHash, err := accounts.Deposit(context)
+					if err != nil {
+						log.WithError(err).Fatal("Could not deposit for a new validator")
+						return err
+					}
+					log.Infof("deposit tx succeeds with txHash %v", txHash)
+					return nil
+				},
+			},
 		},
 	},
 }
