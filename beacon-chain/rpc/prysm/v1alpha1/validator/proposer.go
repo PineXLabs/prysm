@@ -374,7 +374,7 @@ func (vs *Server) broadcastReceiveBlock(ctx context.Context, block interfaces.Si
 		Type: blockfeed.ReceivedBlock,
 		Data: &blockfeed.ReceivedBlockData{SignedBlock: block},
 	})
-	return vs.BlockReceiver.ReceiveBlock(ctx, block, root, nil)
+	return vs.BlockReceiver.ReceiveBlock2(ctx, block, root, nil)
 }
 
 // broadcastAndReceiveBlobs handles the broadcasting and reception of blob sidecars.

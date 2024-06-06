@@ -4644,8 +4644,8 @@ func (s *SignedBeaconBlockContentsDeneb) MarshalSSZTo(buf []byte) (dst []byte, e
 	}
 
 	// Field (1) 'KzgProofs'
-	if size := len(s.KzgProofs); size > 4096 {
-		err = ssz.ErrListTooBigFn("--.KzgProofs", size, 4096)
+	if size := len(s.KzgProofs); size > 528384 {
+		err = ssz.ErrListTooBigFn("--.KzgProofs", size, 528384)
 		return
 	}
 	for ii := 0; ii < len(s.KzgProofs); ii++ {
@@ -4716,7 +4716,7 @@ func (s *SignedBeaconBlockContentsDeneb) UnmarshalSSZ(buf []byte) error {
 	// Field (1) 'KzgProofs'
 	{
 		buf = tail[o1:o2]
-		num, err := ssz.DivideInt2(len(buf), 48, 4096)
+		num, err := ssz.DivideInt2(len(buf), 48, 528384)
 		if err != nil {
 			return err
 		}
@@ -4782,8 +4782,8 @@ func (s *SignedBeaconBlockContentsDeneb) HashTreeRootWith(hh *ssz.Hasher) (err e
 
 	// Field (1) 'KzgProofs'
 	{
-		if size := len(s.KzgProofs); size > 4096 {
-			err = ssz.ErrListTooBigFn("--.KzgProofs", size, 4096)
+		if size := len(s.KzgProofs); size > 528384 {
+			err = ssz.ErrListTooBigFn("--.KzgProofs", size, 528384)
 			return
 		}
 		subIndx := hh.Index()
@@ -4797,9 +4797,9 @@ func (s *SignedBeaconBlockContentsDeneb) HashTreeRootWith(hh *ssz.Hasher) (err e
 
 		numItems := uint64(len(s.KzgProofs))
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, numItems, 4096)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, numItems, 528384)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, numItems, 4096)
+			hh.MerkleizeWithMixin(subIndx, numItems, 528384)
 		}
 	}
 
@@ -4865,8 +4865,8 @@ func (b *BeaconBlockContentsDeneb) MarshalSSZTo(buf []byte) (dst []byte, err err
 	}
 
 	// Field (1) 'KzgProofs'
-	if size := len(b.KzgProofs); size > 4096 {
-		err = ssz.ErrListTooBigFn("--.KzgProofs", size, 4096)
+	if size := len(b.KzgProofs); size > 528384 {
+		err = ssz.ErrListTooBigFn("--.KzgProofs", size, 528384)
 		return
 	}
 	for ii := 0; ii < len(b.KzgProofs); ii++ {
@@ -4937,7 +4937,7 @@ func (b *BeaconBlockContentsDeneb) UnmarshalSSZ(buf []byte) error {
 	// Field (1) 'KzgProofs'
 	{
 		buf = tail[o1:o2]
-		num, err := ssz.DivideInt2(len(buf), 48, 4096)
+		num, err := ssz.DivideInt2(len(buf), 48, 528384)
 		if err != nil {
 			return err
 		}
@@ -5003,8 +5003,8 @@ func (b *BeaconBlockContentsDeneb) HashTreeRootWith(hh *ssz.Hasher) (err error) 
 
 	// Field (1) 'KzgProofs'
 	{
-		if size := len(b.KzgProofs); size > 4096 {
-			err = ssz.ErrListTooBigFn("--.KzgProofs", size, 4096)
+		if size := len(b.KzgProofs); size > 528384 {
+			err = ssz.ErrListTooBigFn("--.KzgProofs", size, 528384)
 			return
 		}
 		subIndx := hh.Index()
@@ -5018,9 +5018,9 @@ func (b *BeaconBlockContentsDeneb) HashTreeRootWith(hh *ssz.Hasher) (err error) 
 
 		numItems := uint64(len(b.KzgProofs))
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, numItems, 4096)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, numItems, 528384)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, numItems, 4096)
+			hh.MerkleizeWithMixin(subIndx, numItems, 528384)
 		}
 	}
 
@@ -9388,8 +9388,8 @@ func (b *BlobSidecars) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	offset += len(b.Sidecars) * 131928
 
 	// Field (0) 'Sidecars'
-	if size := len(b.Sidecars); size > 64 {
-		err = ssz.ErrListTooBigFn("--.Sidecars", size, 64)
+	if size := len(b.Sidecars); size > 4096 {
+		err = ssz.ErrListTooBigFn("--.Sidecars", size, 4096)
 		return
 	}
 	for ii := 0; ii < len(b.Sidecars); ii++ {
@@ -9424,7 +9424,7 @@ func (b *BlobSidecars) UnmarshalSSZ(buf []byte) error {
 	// Field (0) 'Sidecars'
 	{
 		buf = tail[o0:]
-		num, err := ssz.DivideInt2(len(buf), 131928, 64)
+		num, err := ssz.DivideInt2(len(buf), 131928, 4096)
 		if err != nil {
 			return err
 		}
@@ -9464,7 +9464,7 @@ func (b *BlobSidecars) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(b.Sidecars))
-		if num > 64 {
+		if num > 4096 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -9474,9 +9474,9 @@ func (b *BlobSidecars) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 			}
 		}
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 64)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 4096)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, num, 64)
+			hh.MerkleizeWithMixin(subIndx, num, 4096)
 		}
 	}
 
@@ -9632,8 +9632,8 @@ func (c *ColumnSidecar) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	dst = append(dst, c.CommitmentsHash...)
 
 	// Field (1) 'Segments'
-	if size := len(c.Segments); size > 64 {
-		err = ssz.ErrListTooBigFn("--.Segments", size, 64)
+	if size := len(c.Segments); size > 4096 {
+		err = ssz.ErrListTooBigFn("--.Segments", size, 4096)
 		return
 	}
 	{
@@ -9652,8 +9652,8 @@ func (c *ColumnSidecar) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 
 	// Field (2) 'BlobKzgCommitments'
-	if size := len(c.BlobKzgCommitments); size > 64 {
-		err = ssz.ErrListTooBigFn("--.BlobKzgCommitments", size, 64)
+	if size := len(c.BlobKzgCommitments); size > 4096 {
+		err = ssz.ErrListTooBigFn("--.BlobKzgCommitments", size, 4096)
 		return
 	}
 	{
@@ -9672,8 +9672,8 @@ func (c *ColumnSidecar) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 
 	// Field (3) 'SegmentKzgProofs'
-	if size := len(c.SegmentKzgProofs); size > 64 {
-		err = ssz.ErrListTooBigFn("--.SegmentKzgProofs", size, 64)
+	if size := len(c.SegmentKzgProofs); size > 4096 {
+		err = ssz.ErrListTooBigFn("--.SegmentKzgProofs", size, 4096)
 		return
 	}
 	{
@@ -9692,8 +9692,8 @@ func (c *ColumnSidecar) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 	}
 
 	// Field (5) 'CommitmentInclusionProofs'
-	if size := len(c.CommitmentInclusionProofs); size > 64 {
-		err = ssz.ErrListTooBigFn("--.CommitmentInclusionProofs", size, 64)
+	if size := len(c.CommitmentInclusionProofs); size > 4096 {
+		err = ssz.ErrListTooBigFn("--.CommitmentInclusionProofs", size, 4096)
 		return
 	}
 	for ii := 0; ii < len(c.CommitmentInclusionProofs); ii++ {
@@ -9760,7 +9760,7 @@ func (c *ColumnSidecar) UnmarshalSSZ(buf []byte) error {
 	// Field (1) 'Segments'
 	{
 		buf = tail[o1:o2]
-		num, err := ssz.DecodeDynamicLength(buf, 64)
+		num, err := ssz.DecodeDynamicLength(buf, 4096)
 		if err != nil {
 			return err
 		}
@@ -9783,7 +9783,7 @@ func (c *ColumnSidecar) UnmarshalSSZ(buf []byte) error {
 	// Field (2) 'BlobKzgCommitments'
 	{
 		buf = tail[o2:o3]
-		num, err := ssz.DecodeDynamicLength(buf, 64)
+		num, err := ssz.DecodeDynamicLength(buf, 4096)
 		if err != nil {
 			return err
 		}
@@ -9806,7 +9806,7 @@ func (c *ColumnSidecar) UnmarshalSSZ(buf []byte) error {
 	// Field (3) 'SegmentKzgProofs'
 	{
 		buf = tail[o3:o5]
-		num, err := ssz.DecodeDynamicLength(buf, 64)
+		num, err := ssz.DecodeDynamicLength(buf, 4096)
 		if err != nil {
 			return err
 		}
@@ -9829,7 +9829,7 @@ func (c *ColumnSidecar) UnmarshalSSZ(buf []byte) error {
 	// Field (5) 'CommitmentInclusionProofs'
 	{
 		buf = tail[o5:]
-		num, err := ssz.DivideInt2(len(buf), 544, 64)
+		num, err := ssz.DivideInt2(len(buf), 544, 4096)
 		if err != nil {
 			return err
 		}
@@ -9890,7 +9890,7 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(c.Segments))
-		if num > 64 {
+		if num > 4096 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -9911,9 +9911,9 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 			}
 		}
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 64)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 4096)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, num, 64)
+			hh.MerkleizeWithMixin(subIndx, num, 4096)
 		}
 	}
 
@@ -9921,7 +9921,7 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(c.BlobKzgCommitments))
-		if num > 64 {
+		if num > 4096 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -9942,9 +9942,9 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 			}
 		}
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 64)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 4096)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, num, 64)
+			hh.MerkleizeWithMixin(subIndx, num, 4096)
 		}
 	}
 
@@ -9952,7 +9952,7 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(c.SegmentKzgProofs))
-		if num > 64 {
+		if num > 4096 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -9973,9 +9973,9 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 			}
 		}
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 64)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 4096)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, num, 64)
+			hh.MerkleizeWithMixin(subIndx, num, 4096)
 		}
 	}
 
@@ -9988,7 +9988,7 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 	{
 		subIndx := hh.Index()
 		num := uint64(len(c.CommitmentInclusionProofs))
-		if num > 64 {
+		if num > 4096 {
 			err = ssz.ErrIncorrectListSize
 			return
 		}
@@ -9998,9 +9998,9 @@ func (c *ColumnSidecar) HashTreeRootWith(hh *ssz.Hasher) (err error) {
 			}
 		}
 		if ssz.EnableVectorizedHTR {
-			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 64)
+			hh.MerkleizeWithMixinVectorizedHTR(subIndx, num, 4096)
 		} else {
-			hh.MerkleizeWithMixin(subIndx, num, 64)
+			hh.MerkleizeWithMixin(subIndx, num, 4096)
 		}
 	}
 

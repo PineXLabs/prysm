@@ -2,6 +2,7 @@ package validator
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/PineXLabs/das"
@@ -108,7 +109,7 @@ func buildColumnSidecars(blk interfaces.SignedBeaconBlock, blobs [][]byte, kzgPr
 	cLen := len(denebBlk.Block.Body.BlobKzgCommitments)
 	// 128 extra proofs for every blob, also one original proof for it
 	if cLen != len(blobs) || cLen*129 != len(kzgProofs) {
-		return nil, errors.New("blob KZG commitments don't match number of blobs or KZG proofs")
+		return nil, fmt.Errorf("blob KZG commitments don't match number of blobs or KZG proofs, commitments: %d, kzgproofs: %d, blobs: %d", cLen, len(kzgProofs), len(blobs))
 	}
 	if cLen <= 0 {
 		return nil, nil // No blobs in this block.

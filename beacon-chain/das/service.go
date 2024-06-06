@@ -12,6 +12,7 @@ import (
 	errors "github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	lruwrpr "github.com/prysmaticlabs/prysm/v5/cache/lru"
+	"github.com/prysmaticlabs/prysm/v5/cmd"
 	"github.com/prysmaticlabs/prysm/v5/config/params"
 )
 
@@ -164,6 +165,7 @@ func NewService(ctx context.Context, opts ...Option) (*Service, error) {
 		dill_das.WithCommitmentProvider(p),
 		dill_das.WithEnableDasProvider(true),
 		dill_das.WithAllowPutNoCommitments(true),
+		dill_das.WithDatastorePath(cmd.DataDirFlag.Value + "/dht"),
 		dill_das.WithDataTTL(time.Duration(params.BeaconConfig().DhtDataTTL)),
 		dill_das.WithDasLogger(log),
 		dill_das.WithBootstrapNodes(infos),
