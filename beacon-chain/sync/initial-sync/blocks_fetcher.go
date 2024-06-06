@@ -652,6 +652,7 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 	if req == nil {
 		return bwc, nil
 	}
+
 	requestedCols := p2p.SubnetsToColumns(subnets)
 	req.SlotCols = make([]*p2ppb.ColumnSidecarsByRangeRequest_SlotColumns, req.Count)
 	for i := range req.SlotCols {
@@ -659,6 +660,9 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 			Columns: requestedCols,
 		}
 	}
+	log.WithField("column request start", req.StartSlot).
+		WithField("column request count", req.Count).
+		WithField("column needed", requestedCols).Debug("start fetching columns")
 	startColumnIndex := requestedCols[0]
 	genRoot := f.clock.GenesisValidatorsRoot()
 	digest, err := forks.CreateForkDigest(f.clock.GenesisTime(), genRoot[:])
@@ -690,10 +694,11 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 	}
 	var subnet = subnets[0]
 	var lastSubnet = subnets[len(subnets)-1]
-	for {
-		if subnet > lastSubnet {
-			break
-		}
+	var lowestSubnet uint64
+	log.WithField("block num", len(bwm)).
+		WithField("first subnet", subnet).
+		WithField("lastSubnet", lastSubnet).Debug("start fetching from subnets")
+	for subnet <= lastSubnet {
 		topic := fmt.Sprintf(p2p.ColumnSubnetTopicFormat, digest, subnet)
 		topicPeers := f.p2p.PubSub().ListPeers(topic)
 		peers := f.filterPeers(ctx, topicPeers, peersPercentagePerRequest)
@@ -707,7 +712,9 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 				peers = bestPeers
 			}
 		}
-		fullfilt := false
+		log.WithField("subnet", subnet).
+			WithField("peers", peers).Debug("request columns from subnets")
+		currentSubnetFullfilt := false
 		for j := 0; j < len(peers); j++ {
 			p := peers[j]
 			columns, err := f.requestColumns(ctx, req, p)
@@ -720,23 +727,27 @@ func (f *blocksFetcher) fetchColumnsFromSubnets(ctx context.Context, bwc []block
 			if err != nil {
 				return nil, err
 			}
-			lowestSubnet := refreshReqAndLowestSubnet(req, bwm)
+			lowestSubnet = refreshReqAndLowestSubnet(req, bwm)
 			if n := lowestSubnet - subnet; n > 0 {
 				// lowestSubnet not equal to subnet
 				// which means current subnet's requirement has been fullfilt
 				// we can just skip to next subnet
 				subnet = lowestSubnet
-				fullfilt = true
+				currentSubnetFullfilt = true
 				break
 			}
 		}
-		if !fullfilt {
-			// we cannot get all of the columns of this subnet
-			// for not being blocked here, we shall just move on
+		// we cannot get all of the columns of this subnet
+		// for not being blocked here, we shall just move on
+		if !currentSubnetFullfilt {
 			subnet += 1
 		}
 	}
-	return bwc, err
+	if lowestSubnet < lastSubnet {
+		log.WithField("lowest subnet to be required", lowestSubnet).Error("still need to fetch columns")
+		return bwc, fmt.Errorf("cannot fetch all columns from the network")
+	}
+	return bwc, nil
 }
 
 // requestBlocks is a wrapper for handling BeaconBlocksByRangeRequest requests/streams.

@@ -300,6 +300,7 @@ func (s *Service) sendBatchRootRequest(ctx context.Context, roots [][32]byte, ra
 	if len(roots) == 0 {
 		return nil
 	}
+	log.WithField("root count", len(roots)).Debug("request root count")
 	bestPeers := s.getBestPeers()
 	if len(bestPeers) == 0 {
 		return nil

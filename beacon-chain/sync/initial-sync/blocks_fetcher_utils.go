@@ -382,17 +382,35 @@ func checkColumnCommitments(column *blocks.ROColumn, commits [][]byte) error {
 
 func refreshReqAndLowestSubnet(req *p2ppb.ColumnSidecarsByRangeRequest, bwm map[primitives.Slot]*blocks.BlockWithROColumns) uint64 {
 	// find the lowest column number that we still required
-	var lowestRequiredColNumber uint64 = params.BeaconConfig().ColumnCount
-	for i := 0; i < int(req.Count); i++ {
+	// we set the initial number of lowestRequiredColNumber euqal to ColumnsidecarSubnetCount
+	// so that when all the columns are received, the lowest will larger thant the last column index
+	var lowestRequiredColNumber uint64 = params.BeaconConfig().ColumnsidecarSubnetCount
+	for i := 0; i < len(bwm); i++ {
 		slot := req.StartSlot + primitives.Slot(i)
-		bwc := bwm[slot]
+		bwc, ok := bwm[slot]
+		if !ok {
+			log.WithFields(logrus.Fields{
+				"slot":       slot,
+				"start slot": req.StartSlot,
+			}).Error("block with columns not received")
+			break
+		}
 		colsReceived := bwc.Columns
 		requestedCols := req.SlotCols[i].Columns
 		newRequestedCols := &p2ppb.ColumnSidecarsByRangeRequest_SlotColumns{
 			Columns: make([]uint64, 0),
 		}
-		for j := range colsReceived {
-			if colsReceived[j].ColumnSidecar == nil {
+
+		receivedColumnMap := make(map[uint64]struct{})
+		for _, col := range colsReceived {
+			if col.ColumnSidecar == nil {
+				continue
+			}
+			receivedColumnMap[col.Index] = struct{}{}
+		}
+		log.WithField("map", receivedColumnMap).WithField("slot", slot).Debug("received columns")
+		for j, idx := range requestedCols {
+			if _, ok := receivedColumnMap[idx]; !ok {
 				newRequestedCols.Columns = append(newRequestedCols.Columns, requestedCols[j])
 			}
 		}
