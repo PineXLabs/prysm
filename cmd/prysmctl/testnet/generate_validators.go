@@ -24,7 +24,7 @@ var (
 		Name:  "generate-validators",
 		Usage: "Generate a set of validators",
 		Action: func(cliCtx *cli.Context) error {
-			if err := cliActionGenerateValidators(cliCtx); err != nil {
+			if err := cliActionGenerateValidators(); err != nil {
 				log.WithError(err).Fatal("Could not generate validators")
 			}
 			return nil
@@ -55,7 +55,7 @@ var (
 	}
 )
 
-func cliActionGenerateValidators(cliCtx *cli.Context) error {
+func cliActionGenerateValidators() error {
 	if err := setGlobalParams(); err != nil {
 		return fmt.Errorf("could not set config params: %v", err)
 	}
@@ -74,7 +74,7 @@ func cliActionGenerateValidators(cliCtx *cli.Context) error {
 	for index, sk := range sks {
 		var buffer bytes.Buffer
 		buffer.WriteString(outputValidatorsKeysFlag)
-		buffer.WriteString("validator-wallet")
+		buffer.WriteString("validator-privateKey")
 		buffer.WriteString(strconv.Itoa(index))
 		buffer.WriteString(".txt")
 

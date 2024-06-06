@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+	"github.com/prysmaticlabs/prysm/v5/validator/accounts/userprompt"
 	"os"
 
 	"github.com/logrusorgru/aurora"
@@ -201,7 +202,8 @@ var Commands = []*cli.Command{
 					if err := cmd.LoadFlagsFromConfig(cliCtx, cliCtx.Command.Flags); err != nil {
 						return err
 					}
-					if err := tos.VerifyTosAcceptedOrPrompt(cliCtx); err != nil {
+					err := userprompt.InputSignerPrivateKey(cliCtx, userprompt.InputPrivateKeyPromptText, flags.DepositSignerPrivateKey)
+					if err != nil {
 						return err
 					}
 					return nil

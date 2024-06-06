@@ -20,7 +20,7 @@ var (
 		Name:  "deposit-in-genesis",
 		Usage: "validators deposit in a contract precompiled in genesis",
 		Action: func(cliCtx *cli.Context) error {
-			if err := cliActionDepositInGenesis(cliCtx); err != nil {
+			if err := cliActionDepositInGenesis(); err != nil {
 				log.WithError(err).Fatal("Could not deposit in genesis")
 			}
 			return nil
@@ -50,12 +50,13 @@ var (
 	}
 )
 
-func cliActionDepositInGenesis(cliCtx *cli.Context) error {
+func cliActionDepositInGenesis() error {
 	if err := setGlobalParams(); err != nil {
 		return fmt.Errorf("could not set config params: %v", err)
 	}
 	f := &generateGenesisStateFlags
 	t := utils.NewMerkleTree(int(params.BeaconConfig().DepositContractTreeDepth))
+
 	if f.DepositJsonFile == "" || f.GethGenesisJsonIn == "" {
 		return fmt.Errorf("no deposit file or genesis file provided")
 	}
@@ -130,6 +131,7 @@ func allocDefaultStorageForDepositContract(genesisJSON *core.Genesis) {
 	}
 	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000021")] = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
 	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000022")] = common.HexToHash("0xf5a5fd42d16a20302798ef6ed309979b43003d2320d9f0e8ea9831a92759fb4b")
+	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000023")] = common.HexToHash("0xdb56114e00fdd4c1f85c892bf35ac9a89289aaecb1ebd0a96cde606a748b5d71")
 	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000024")] = common.HexToHash("0xc78009fdf07fc56a11f122370658a353aaa542ed63e44c4bc15ff4cd105ab33c")
 	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000025")] = common.HexToHash("0x536d98837f2dd165a55d5eeae91485954472d56f246df256bf3cae19352a123c")
 	alloc.Storage[common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000026")] = common.HexToHash("0x9efde052aa15429fae05bad4d0b1d7c64da64d03d7a1854a588c2cb8430c0d30")

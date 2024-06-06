@@ -1,6 +1,7 @@
 package userprompt
 
 import (
+	"encoding/hex"
 	"github.com/logrusorgru/aurora"
 	"github.com/manifoldco/promptui"
 	"github.com/pkg/errors"
@@ -8,6 +9,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/io/file"
 	"github.com/prysmaticlabs/prysm/v5/io/prompt"
 	"github.com/urfave/cli/v2"
+	"strings"
 )
 
 const (
@@ -25,6 +27,8 @@ const (
 	SelectAccountsBackupPromptText = "Select the account(s) you wish to backup"
 	// SelectAccountsVoluntaryExitPromptText --
 	SelectAccountsVoluntaryExitPromptText = "Select the account(s) on which you wish to perform a voluntary exit"
+	// InputPrivateKeyPromptText for the private key passed to the flag
+	InputPrivateKeyPromptText = "Note that you are passing the private key to the flag, make sure your are in a safe ambient environment. Enter (yes) to proceed, or any other key to cancel"
 )
 
 var au = aurora.NewAurora(true)
@@ -55,6 +59,31 @@ func InputDirectory(cliCtx *cli.Context, promptText string, flag *cli.StringFlag
 		return directory, nil
 	}
 	return file.ExpandPath(inputtedDir)
+}
+
+func InputSignerPrivateKey(cliCtx *cli.Context, promptText string, flag *cli.StringFlag) error {
+	signerPrivateKey := cliCtx.String(flag.Name)
+	if !cliCtx.IsSet(flag.Name) {
+		return errors.New("No Private Key provided")
+	}
+
+	sk, err := hex.DecodeString(strings.TrimPrefix(signerPrivateKey, "0x"))
+	if err != nil {
+		return errors.Wrap(err, "could not decode private key")
+	}
+	if len(sk) != 32 {
+		return errors.New("invalid private key format")
+	}
+
+	res, err := prompt.DefaultPrompt(au.Bold(promptText).String(), "")
+	if err != nil {
+		return err
+	}
+	if res == "yes" {
+		return nil
+	}
+
+	return errors.New("canceled")
 }
 
 // FormatPromptError for the user.
