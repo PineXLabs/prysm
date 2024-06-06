@@ -13,7 +13,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/runtime/logging"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -109,7 +109,7 @@ func (s *LazilyPersistentStore) IsDataAvailable(ctx context.Context, current pri
 		ok := errors.As(err, &me)
 		if ok {
 			fails := me.Failures()
-			lf := make(log.Fields, len(fails))
+			lf := make(logrus.Fields, len(fails))
 			for i := range fails {
 				lf[fmt.Sprintf("fail_%d", i)] = fails[i].Error()
 			}

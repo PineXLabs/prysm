@@ -10,6 +10,9 @@ import (
 // for the block root `root` is ready in the database
 func (s *Service) sendNewColumnEvent(root [32]byte, index uint64) {
 	s.columnNotifiers.notifyIndex(root, index)
+	for _, sub := range s.cfg.ColumnReceivedSubscribers {
+		sub.NotifyColumnReceived(root, int(index))
+	}
 }
 
 // ReceiveColumn saves the column to database and sends the new event

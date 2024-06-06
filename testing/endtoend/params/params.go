@@ -47,6 +47,7 @@ type ports struct {
 	PrysmBeaconNodeRPCPort          int
 	PrysmBeaconNodeUDPPort          int
 	PrysmBeaconNodeTCPPort          int
+	PrysmBeaconNodeDHTPort          int
 	PrysmBeaconNodeGatewayPort      int
 	PrysmBeaconNodeMetricsPort      int
 	PrysmBeaconNodePprofPort        int

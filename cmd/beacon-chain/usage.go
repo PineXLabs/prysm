@@ -56,6 +56,7 @@ var appHelpFlagGroups = []flagGroup{
 			cmd.RelayNode,
 			cmd.P2PUDPPort,
 			cmd.P2PTCPPort,
+			cmd.DHTTCPPort,
 			cmd.DataDirFlag,
 			cmd.VerbosityFlag,
 			cmd.EnableTracingFlag,

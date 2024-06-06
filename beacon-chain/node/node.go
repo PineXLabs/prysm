@@ -18,6 +18,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gorilla/mux"
+	"github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	apigateway "github.com/prysmaticlabs/prysm/v5/api/gateway"
 	"github.com/prysmaticlabs/prysm/v5/api/server"
@@ -27,6 +28,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache/depositcache"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/cache/depositsnapshot"
+	"github.com/prysmaticlabs/prysm/v5/beacon-chain/das"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/filesystem"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/db/kv"
@@ -65,6 +67,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/container/slice"
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	"github.com/prysmaticlabs/prysm/v5/monitoring/prometheus"
+	prysmnetwork "github.com/prysmaticlabs/prysm/v5/network"
 	"github.com/prysmaticlabs/prysm/v5/runtime"
 	"github.com/prysmaticlabs/prysm/v5/runtime/debug"
 	"github.com/prysmaticlabs/prysm/v5/runtime/prereqs"
@@ -82,6 +85,7 @@ type serviceFlagOpts struct {
 	blockchainFlagOpts     []blockchain.Option
 	executionChainFlagOpts []execution.Option
 	builderOpts            []builder.Option
+	dasOpts                []das.Option
 }
 
 // BeaconNode defines a struct that handles the services running a random beacon chain
@@ -341,6 +345,11 @@ func registerServices(cliCtx *cli.Context, beacon *BeaconNode, synchronizer *sta
 	log.Debugln("Registering Deterministic Genesis Service")
 	if err := beacon.registerDeterministicGenesisService(); err != nil {
 		return errors.Wrap(err, "could not register deterministic genesis service")
+	}
+
+	log.Debugln("Registering Das Service")
+	if err := beacon.registerDasService(cliCtx); err != nil {
+		return errors.Wrap(err, "could not register das service")
 	}
 
 	log.Debugln("Registering Blockchain Service")
@@ -766,6 +775,11 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		return err
 	}
 
+	var dasService *das.Service
+	if err := b.services.FetchService(&dasService); err != nil {
+		return err
+	}
+
 	// skipcq: CRT-D0001
 	opts := append(
 		b.serviceFlagOpts.blockchainFlagOpts,
@@ -791,6 +805,7 @@ func (b *BeaconNode) registerBlockchainService(fc forkchoice.ForkChoicer, gs *st
 		blockchain.WithTrackedValidatorsCache(b.trackedValidatorsCache),
 		blockchain.WithPayloadIDCache(b.payloadIDCache),
 		blockchain.WithSyncChecker(b.syncChecker),
+		blockchain.WithColumnReceivedSubscribers([]blockchain.ColumnReceivedSubscriber{dasService}),
 	)
 
 	blockchainService, err := blockchain.NewService(b.ctx, opts...)
@@ -1176,6 +1191,24 @@ func (b *BeaconNode) registerBuilderService(cliCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	return b.services.RegisterService(svc)
+}
+
+func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
+	opts := b.serviceFlagOpts.dasOpts
+	h := b.fetchP2P().Host()
+	ipAddr := prysmnetwork.IPAddr()
+	extraAddr := fmt.Sprintf("/ip4/%s/tcp/%d", ipAddr, cmd.DHTTCPPort.Value)
+	addr, err := multiaddr.NewMultiaddr(extraAddr)
+	if err != nil {
+		return err
+	}
+	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(h), das.WithDhtListenMa(addr))
+	svc, err := das.NewService(b.ctx, opts...)
+	if err != nil {
+		return err
+	}
+	log.Debugf("supported protocols: %v", h.Mux().Protocols())
 	return b.services.RegisterService(svc)
 }
 

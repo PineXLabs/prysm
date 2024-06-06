@@ -291,6 +291,8 @@ var mainnetBeaconConfig = &BeaconChainConfig{
 	ColumnsidecarSubnetCount:           128,
 	BeaconColumnSubnetCustodyRequired:  16,
 	ColumnCount:                        128,
+	// 4 epoches
+	DhtDataTTL: uint64(12 * 32 * 4 * time.Second),
 }
 
 // MainnetTestConfig provides a version of the mainnet config that has a different name

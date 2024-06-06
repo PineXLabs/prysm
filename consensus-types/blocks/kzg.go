@@ -108,6 +108,43 @@ func MerkleProofKZGCommitment(body interfaces.ReadOnlyBeaconBlockBody, index int
 	return proof, nil
 }
 
+func MerkleProofKZGCommitments(body interfaces.ReadOnlyBeaconBlockBody) ([][]byte, error) {
+	bodyVersion := body.Version()
+	if bodyVersion < version.Deneb {
+		return nil, errUnsupportedBeaconBlockBody
+	}
+	commitments, err := body.BlobKzgCommitments()
+	if err != nil {
+		return nil, err
+	}
+	leaves := leavesFromCommitments(commitments)
+	sparce, err := trie.GenerateTrieFromItems(leaves, field_params.LogMaxBlobCommitments)
+	if err != nil {
+		return nil, err
+	}
+	commitmentRoot, err := sparce.HashTreeRoot()
+	if err != nil {
+		return nil, err
+	}
+	membersRoots, err := topLevelRoots(body)
+	if err != nil {
+		return nil, err
+	}
+	blockSparce, err := trie.GenerateTrieFromItems(membersRoots, logBodyLength)
+	if err != nil {
+		return nil, err
+	}
+	topProof, err := blockSparce.MerkleProof(kzgPosition)
+	if err != nil {
+		return nil, err
+	}
+	var proof = [][]byte{commitmentRoot[:]}
+	// sparse.MerkleProof always includes the length of the slice this is
+	// why we remove the last element that is not needed in topProof
+	proof = append(proof, topProof[:len(topProof)-1]...)
+	return proof, nil
+}
+
 // leavesFromCommitments hashes each commitment to construct a slice of roots
 func leavesFromCommitments(commitments [][]byte) [][]byte {
 	leaves := make([][]byte, len(commitments))
