@@ -16,6 +16,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/monitoring/tracing"
 	pb "github.com/prysmaticlabs/prysm/v5/proto/prysm/v1alpha1"
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -100,7 +101,16 @@ func (s *Service) columnSidecarsByRangeRPCHandler(ctx context.Context, msg inter
 		tracing.AnnotateError(span, err)
 		return err
 	}
-
+	defer func() {
+		log.WithError(err).WithFields(
+			logrus.Fields{
+				"range param size": rp.size,
+				"StartSlot":        r.StartSlot,
+				"Count":            r.Count,
+				"current slot":     s.cfg.chain.CurrentSlot(),
+			},
+		).Debug("ColumnsSidecarsByRangeHandler")
+	}()
 	// Ticker to stagger out large requests.
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -159,7 +169,7 @@ func ColumnRPCMinValidSlot(current primitives.Slot) (primitives.Slot, error) {
 }
 
 func columnBatchLimit() uint64 { //todo: to confirm again
-	return uint64(flags.Get().BlockBatchLimit / fieldparams.MaxBlobsPerBlock * fieldparams.MaxColumnsPerBlock / fieldparams.MaxBlobsPerBlock)
+	return uint64(flags.Get().BlockBatchLimit * fieldparams.MaxColumnsPerBlock)
 }
 
 func validateColumnsByRange(r *pb.ColumnSidecarsByRangeRequest, current primitives.Slot) (rangeParams, error) {

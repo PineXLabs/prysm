@@ -478,7 +478,7 @@ func (s *Service) handleETH1FollowDistance() {
 	// we do not request batched logs as this means there are no new
 	// logs for the execution service to process. Also it is a potential
 	// failure condition as would mean we have not respected the protocol threshold.
-	if s.latestEth1Data.LastRequestedBlock == s.latestEth1Data.BlockHeight {
+	if s.latestEth1Data.BlockHeight != 0 && s.latestEth1Data.LastRequestedBlock == s.latestEth1Data.BlockHeight {
 		log.WithField("lastBlockNumber", s.latestEth1Data.LastRequestedBlock).Error("Beacon node is not respecting the follow distance. EL client is syncing.")
 		return
 	}

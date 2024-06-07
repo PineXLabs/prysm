@@ -71,7 +71,7 @@ const (
 	// ExchangeCapabilities request string for JSON-RPC.
 	ExchangeCapabilities = "engine_exchangeCapabilities"
 	// Defines the seconds before timing out engine endpoints with non-block execution semantics.
-	defaultEngineTimeout = time.Second
+	defaultEngineTimeout = 4 * time.Second
 )
 
 // ForkchoiceUpdatedResponse is the response kind received by the

@@ -281,7 +281,7 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 	log.WithFields(logrus.Fields{
 		"columnSidecars count": len(columnSidecars),
 	}).Info("handleUnblindedBlockToCols")
-
+	
 	root, err := block.Block().HashTreeRoot()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not hash tree root: %v", err)

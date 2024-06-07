@@ -1203,7 +1203,11 @@ func (b *BeaconNode) registerDasService(cliCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	opts = append(opts, das.WithColumnStorage(b.ColumnStorage), das.WithHost(h), das.WithDhtListenMa(addr))
+	opts = append(opts,
+		das.WithColumnStorage(b.ColumnStorage),
+		das.WithHost(h),
+		das.WithDhtListenMa(addr),
+		das.WithDataStorePath(cliCtx.String(cmd.DataDirFlag.Name)+"/dht"))
 	svc, err := das.NewService(b.ctx, opts...)
 	if err != nil {
 		return err
