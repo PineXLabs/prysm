@@ -214,7 +214,7 @@ func (vs *Server) PruneBlobsBundleCacheRoutine() {
 			return
 		}
 
-		pruneInterval := time.Second * time.Duration(params.BeaconConfig().SecondsPerSlot/2)
+		pruneInterval := time.Second * time.Duration(params.BeaconConfig().SecondsPerSlot*2)
 		ticker := slots.NewSlotTickerWithIntervals(clock.GenesisTime(), []time.Duration{pruneInterval})
 		for {
 			select {

@@ -9684,7 +9684,7 @@ func (c *ColumnSidecar) MarshalSSZTo(buf []byte) (dst []byte, err error) {
 		}
 	}
 	for ii := 0; ii < len(c.SegmentKzgProofs); ii++ {
-		if size := len(c.SegmentKzgProofs[ii]); size > 48 {
+		if size := len(c.SegmentKzgProofs[ii]); size !=48 {
 			err = ssz.ErrBytesLengthFn("--.SegmentKzgProofs[ii]", size, 48)
 			return
 		}

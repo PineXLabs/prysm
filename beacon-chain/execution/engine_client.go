@@ -248,6 +248,7 @@ func (s *Service) GetPayload(ctx context.Context, payloadId [8]byte, slot primit
 	start := time.Now()
 	defer func() {
 		getPayloadLatency.Observe(float64(time.Since(start).Milliseconds()))
+		log.WithField("time", time.Since(start).Milliseconds()).Debug("GetPayload lentency")
 	}()
 
 	d := time.Now().Add(defaultEngineTimeout)
@@ -267,7 +268,7 @@ func (s *Service) GetPayload(ctx context.Context, payloadId [8]byte, slot primit
 		log.WithFields(logrus.Fields{
 			"proof count": len(result.BlobsBundle.Proofs),
 			"blob count":  len(result.BlobsBundle.Blobs),
-		}).Debug("get payload called, proof count should equal to blob_num * (128 + 1)")
+		}).Debug("get payload called)")
 		return ed, result.BlobsBundle, result.ShouldOverrideBuilder, nil
 	}
 

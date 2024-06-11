@@ -57,7 +57,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 	fmtKey := fmt.Sprintf("%#x", pubKey[:])
 	span.AddAttributes(trace.StringAttribute("validator", fmtKey))
 	log := log.WithField("pubkey", fmt.Sprintf("%#x", bytesutil.Trunc(pubKey[:])))
-
+	log.WithField("slot", slot).Debug("validator signRandaoReveal")
 	// Sign randao reveal, it's used to request block from beacon node
 	epoch := primitives.Epoch(slot / params.BeaconConfig().SlotsPerEpoch)
 	randaoReveal, err := v.signRandaoReveal(ctx, pubKey, epoch, slot)
@@ -68,7 +68,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		}
 		return
 	}
-
+	log.WithField("slot", slot).Debug("validator signRandaoReveal done")
 	g, err := v.GetGraffiti(ctx, pubKey)
 	if err != nil {
 		// Graffiti is not a critical enough to fail block production and cause
@@ -77,6 +77,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		log.WithError(err).Warn("Could not get graffiti")
 	}
 
+	log.WithField("slot", slot).Debug("validator GetBeaconBlock")
 	// Request block from beacon node
 	b, err := v.validatorClient.GetBeaconBlock(ctx, &ethpb.BlockRequest{
 		Slot:         slot,
@@ -90,7 +91,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		}
 		return
 	}
-
+	log.WithField("slot", slot).Debug("validator GetBeaconBlock done")
 	// Sign returned block from beacon node
 	wb, err := blocks.NewBeaconBlock(b.Block)
 	if err != nil {
@@ -100,7 +101,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		}
 		return
 	}
-
+	log.WithField("slot", slot).Debug("validator signBlock")
 	sig, signingRoot, err := v.signBlock(ctx, pubKey, epoch, slot, wb)
 	if err != nil {
 		log.WithError(err).Error("Failed to sign block")
@@ -109,7 +110,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		}
 		return
 	}
-
+	log.WithField("slot", slot).Debug("validator signBlock done")
 	blk, err := blocks.BuildSignedBeaconBlock(wb, sig)
 	if err != nil {
 		log.WithError(err).Error("Failed to build signed beacon block")
@@ -152,7 +153,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 			return
 		}
 	}
-
+	log.WithField("slot", slot).Debug("validator ProposeBeaconBlock")
 	blkResp, err := v.validatorClient.ProposeBeaconBlock(ctx, genericSignedBlock)
 	if err != nil {
 		log.WithField("slot", slot).WithError(err).Error("Failed to propose block")
@@ -161,7 +162,7 @@ func (v *validator) ProposeBlock(ctx context.Context, slot primitives.Slot, pubK
 		}
 		return
 	}
-
+	log.WithField("slot", slot).Debug("validator ProposeBeaconBlock done")
 	span.AddAttributes(
 		trace.StringAttribute("blockRoot", fmt.Sprintf("%#x", blkResp.BlockRoot)),
 		trace.Int64Attribute("numDeposits", int64(len(blk.Block().Body().Deposits()))),

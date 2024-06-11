@@ -189,7 +189,7 @@ func NewSlotTickerWithIntervals(genesisTime time.Time, intervals []time.Duration
 		if offset < lastOffset {
 			panic("invalid decreasing offsets")
 		}
-		if offset >= slotDuration {
+		if offset > 2*slotDuration {
 			panic("invalid ticker offset")
 		}
 		lastOffset = offset

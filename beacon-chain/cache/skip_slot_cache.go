@@ -11,6 +11,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v5/beacon-chain/state"
 	lruwrpr "github.com/prysmaticlabs/prysm/v5/cache/lru"
+	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
 )
 
@@ -133,6 +134,7 @@ func (c *SkipSlotCache) Put(_ context.Context, r [32]byte, state state.BeaconSta
 	if c.disabled {
 		return
 	}
+	logrus.WithField("prefix", "cache").WithField("skip slot", state.Slot()).Debug("SkipSlotCache")
 	// Copy state so cached value is not mutated.
 	c.cache.Add(r, state.Copy())
 }

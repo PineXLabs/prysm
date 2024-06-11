@@ -35,7 +35,7 @@ func LogRequests(
 	start := time.Now()
 	err := invoker(ctx, method, req, reply, cc, opts...)
 	logrus.WithField("backend", header["x-backend"]).
-		WithField("method", method).WithField("duration", time.Since(start)).
+		WithField("method", method).WithField("duration", time.Since(start).Milliseconds()).
 		Debug("gRPC request finished.")
 	return err
 }

@@ -1,10 +1,13 @@
 package enginev1
 
 import (
+	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -14,6 +17,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/consensus-types/primitives"
 	"github.com/prysmaticlabs/prysm/v5/encoding/bytesutil"
 	"github.com/prysmaticlabs/prysm/v5/runtime/version"
+	"github.com/sirupsen/logrus"
 )
 
 // PayloadIDBytes defines a custom type for Payload IDs used by the engine API
@@ -250,7 +254,7 @@ type ExecutionPayloadCapellaJSON struct {
 type GetPayloadV3ResponseJson struct {
 	ExecutionPayload      *ExecutionPayloadDenebJSON `json:"executionPayload"`
 	BlockValue            string                     `json:"blockValue"`
-	BlobsBundle           *BlobBundleJSON            `json:"blobsBundle"`
+	BlobsBundle           []byte                     `json:"blobsBundle"`
 	ShouldOverrideBuilder bool                       `json:"shouldOverrideBuilder"`
 }
 
@@ -691,6 +695,53 @@ type BlobBundleJSON struct {
 	Blobs       []hexutil.Bytes `json:"blobs"`
 }
 
+func (b *BlobBundleJSON) MarshalJSON() ([]byte, error) {
+	blobSize := 4096 * 32
+	bdle := make([]byte, 0, len(b.Blobs)*(blobSize)+len(b.Blobs)*129*48+len(b.Blobs)*48+4)
+	bdle = binary.BigEndian.AppendUint32(bdle, uint32(len(b.Blobs)))
+	for i := range b.Blobs {
+		bdle = append(bdle, b.Blobs[i]...)
+	}
+	for i := range b.Commitments {
+		bdle = append(bdle, b.Commitments[i]...)
+	}
+	for i := range b.Proofs {
+		bdle = append(bdle, b.Proofs[i]...)
+	}
+	return bdle, nil
+}
+
+func (b *BlobBundleJSON) UnmarshalJSON(enc []byte) error {
+	// case empty
+	if len(enc) < 4 {
+		return nil
+	}
+	bdle := enc
+
+	length := int(binary.BigEndian.Uint32(bdle[:4]))
+	if length > 512 {
+		return fmt.Errorf("too large bundle: %d, buffer size: %d", length, len(bdle))
+	}
+	blobSize := 4096 * 32
+	if len(bdle) != length*(blobSize)+length*129*48+length*48+4 {
+		return fmt.Errorf("bad bundle length: %d, expected length %d", len(bdle), length*(blobSize)+length*129*48+length*48+4)
+	}
+	bdle = bdle[4:]
+
+	for i := range length {
+		b.Blobs = append(b.Blobs, bdle[i*blobSize:(i+1)*blobSize])
+	}
+	bdle = bdle[(length)*blobSize:]
+	for i := range length {
+		b.Commitments = append(b.Commitments, bdle[i*48:((i+1)*48)])
+	}
+	bdle = bdle[(length)*48:]
+	for i := range length * 129 {
+		b.Proofs = append(b.Proofs, bdle[i*48:(i+1)*48])
+	}
+	return nil
+}
+
 func (b BlobBundleJSON) ToProto() *BlobsBundle {
 	return &BlobsBundle{
 		KzgCommitments: bytesutil.SafeCopy2dHexUtilBytes(b.Commitments),
@@ -747,11 +798,18 @@ func (e *ExecutionPayloadDeneb) MarshalJSON() ([]byte, error) {
 }
 
 func (e *ExecutionPayloadDenebWithValueAndBlobsBundle) UnmarshalJSON(enc []byte) error {
+	start := time.Now()
+	defer func() {
+		logrus.WithField("time used", time.Since(start).Milliseconds()).Debug("UnmarshalJSON ExecutionPayloadDenebWithValueAndBlobsBundle")
+	}()
 	dec := GetPayloadV3ResponseJson{}
 	if err := json.Unmarshal(enc, &dec); err != nil {
 		return err
 	}
 
+	if dec.ExecutionPayload == nil {
+		return errors.New("missing ExecutionPayload")
+	}
 	if dec.ExecutionPayload.ParentHash == nil {
 		return errors.New("missing required field 'parentHash' for ExecutionPayload")
 	}
@@ -835,28 +893,34 @@ func (e *ExecutionPayloadDenebWithValueAndBlobsBundle) UnmarshalJSON(enc []byte)
 		return err
 	}
 	e.Value = bytesutil.PadTo(bytesutil.ReverseByteOrder(v.Bytes()), fieldparams.RootLength)
-
-	if dec.BlobsBundle == nil {
-		return nil
-	}
 	e.BlobsBundle = &BlobsBundle{}
 
-	commitments := make([][]byte, len(dec.BlobsBundle.Commitments))
-	for i, kzg := range dec.BlobsBundle.Commitments {
+	if len(dec.BlobsBundle) == 0 {
+		return nil
+	}
+
+	jsonBundle := &BlobBundleJSON{}
+	err = jsonBundle.UnmarshalJSON(dec.BlobsBundle)
+	if err != nil {
+		return err
+	}
+
+	commitments := make([][]byte, len(jsonBundle.Commitments))
+	for i, kzg := range jsonBundle.Commitments {
 		k := kzg
 		commitments[i] = bytesutil.PadTo(k[:], fieldparams.BLSPubkeyLength)
 	}
 	e.BlobsBundle.KzgCommitments = commitments
 
-	proofs := make([][]byte, len(dec.BlobsBundle.Proofs))
-	for i, proof := range dec.BlobsBundle.Proofs {
+	proofs := make([][]byte, len(jsonBundle.Proofs))
+	for i, proof := range jsonBundle.Proofs {
 		p := proof
 		proofs[i] = bytesutil.PadTo(p[:], fieldparams.BLSPubkeyLength)
 	}
 	e.BlobsBundle.Proofs = proofs
 
-	blobs := make([][]byte, len(dec.BlobsBundle.Blobs))
-	for i, blob := range dec.BlobsBundle.Blobs {
+	blobs := make([][]byte, len(jsonBundle.Blobs))
+	for i, blob := range jsonBundle.Blobs {
 		b := make([]byte, fieldparams.BlobLength)
 		copy(b, blob)
 		blobs[i] = b

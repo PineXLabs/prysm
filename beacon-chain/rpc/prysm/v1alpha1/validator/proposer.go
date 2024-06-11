@@ -30,6 +30,7 @@ import (
 	"github.com/prysmaticlabs/prysm/v5/time/slots"
 	"github.com/sirupsen/logrus"
 	"go.opencensus.io/trace"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -228,7 +229,6 @@ func (vs *Server) BuildBlockParallel(ctx context.Context, sBlk interfaces.Signed
 	if err != nil {
 		return status.Errorf(codes.Internal, "Could not get local payload: %v", err)
 	}
-
 	// There's no reason to try to get a builder bid if local override is true.
 	var builderPayload interfaces.ExecutionData
 	var builderKzgCommitments [][]byte
@@ -281,7 +281,7 @@ func (vs *Server) ProposeBeaconBlock(ctx context.Context, req *ethpb.GenericSign
 	log.WithFields(logrus.Fields{
 		"columnSidecars count": len(columnSidecars),
 	}).Info("handleUnblindedBlockToCols")
-	
+
 	root, err := block.Block().HashTreeRoot()
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "Could not hash tree root: %v", err)
@@ -402,25 +402,32 @@ func (vs *Server) broadcastAndReceiveBlobs(ctx context.Context, sidecars []*ethp
 
 // broadcastAndReceiveColumns handles the broadcasting and reception of column sidecars.
 func (vs *Server) broadcastAndReceiveColumns(ctx context.Context, sidecars []*ethpb.ColumnSidecar, root [32]byte) error {
+	eg, ctx := errgroup.WithContext(ctx)
 	for i, sc := range sidecars {
-		if err := vs.P2P.BroadcastColumn(ctx, uint64(i), sc); err != nil {
-			return errors.Wrap(err, "broadcast column failed")
+		select {
+		case <-ctx.Done():
+		default:
+			if err := vs.P2P.BroadcastColumn(ctx, uint64(i), sc); err != nil {
+				return errors.Wrap(err, "broadcast column failed")
+			}
+			readOnlySc, err := blocks.NewROColumnWithRoot(sc, root)
+			if err != nil {
+				return errors.Wrap(err, "ROColumn creation failed")
+			}
+			verifiedColumn := blocks.NewVerifiedROColumn(readOnlySc)
+			eg.Go(func() error {
+				if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil {
+					return errors.Wrap(err, "receive column failed")
+				}
+				return nil
+			})
+			vs.OperationNotifier.OperationFeed().Send(&feed.Event{
+				Type: operation.ColumnSidecarReceived,
+				Data: &operation.ColumnSidecarReceivedData{Column: &verifiedColumn},
+			})
 		}
-
-		readOnlySc, err := blocks.NewROColumnWithRoot(sc, root)
-		if err != nil {
-			return errors.Wrap(err, "ROColumn creation failed")
-		}
-		verifiedColumn := blocks.NewVerifiedROColumn(readOnlySc)
-		if err := vs.ColumnReceiver.ReceiveColumn(ctx, verifiedColumn); err != nil {
-			return errors.Wrap(err, "receive column failed")
-		}
-		vs.OperationNotifier.OperationFeed().Send(&feed.Event{
-			Type: operation.ColumnSidecarReceived,
-			Data: &operation.ColumnSidecarReceivedData{Column: &verifiedColumn},
-		})
 	}
-	return nil
+	return eg.Wait()
 }
 
 // PrepareBeaconProposer caches and updates the fee recipient for the given proposer.
